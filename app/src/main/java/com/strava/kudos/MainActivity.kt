@@ -132,7 +132,7 @@ class MainActivity : AppCompatActivity() {
             "human" -> "ЧЕЛОВЕЧНАЯ"
             else -> "УМНАЯ"
         }
-        tvStrategy.text = "СТРАТЕГИЯ: $strategyName"
+        tvStrategy.text = strategyName
     }
 
     private fun startBot() {

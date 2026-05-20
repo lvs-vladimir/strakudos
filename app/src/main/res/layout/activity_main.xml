@@ -153,17 +153,37 @@
                     android:letterSpacing="0.05" />
             </LinearLayout>
 
-            <!-- Strategy Indicator -->
-            <TextView
-                android:id="@+id/tvStrategy"
+            <!-- Strategy Row -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="СТРАТЕГИЯ: УМНАЯ"
-                android:textColor="#88FFFFFF"
-                android:textSize="11sp"
-                android:fontFamily="sans-serif-condensed"
-                android:layout_marginBottom="12dp"
-                android:gravity="center" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="СТРАТЕГИЯ:"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold"
+                    android:fontFamily="sans-serif-condensed"
+                    android:textSize="12sp"
+                    android:letterSpacing="0.1" />
+
+                <TextView
+                    android:id="@+id/tvStrategy"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:text="УМНАЯ"
+                    android:textColor="#00F0FF"
+                    android:textStyle="bold"
+                    android:fontFamily="sans-serif-condensed"
+                    android:textSize="12sp"
+                    android:letterSpacing="0.05" />
+            </LinearLayout>
 
             <!-- Toggle Button (Start/Stop) -->
             <Button
