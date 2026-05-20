@@ -132,15 +132,18 @@
 
     async function scrollToTop() {
         log("⬆️ Наверх...");
-        let i = 0;
-        while (window.scrollY > 100 && i < 30) {
-            if (window.kudosBotShouldStop) return;
-            window.scrollBy({ top: -1000, behavior: 'auto' });
-            await sleep(100);
-            i++;
-        }
+        // Скроллим window
         window.scrollTo({ top: 0, behavior: 'auto' });
-        await sleep(500);
+        
+        // Также скроллим все возможные контейнеры
+        const scrollContainers = document.querySelectorAll('main, [class*="scroll" i], [class*="feed" i], [class*="content" i]');
+        for (const container of scrollContainers) {
+            if (container.scrollTop > 0) {
+                container.scrollTo({ top: 0, behavior: 'auto' });
+            }
+        }
+        
+        await sleep(800);
     }
 
     async function likeVisible() {
@@ -236,6 +239,15 @@
     async function clickFeedSelector() {
         log("🔍 Ищу селектор лент (стрелку рядом с Подписки)...");
         
+        // Сначала гарантированно скроллим наверх
+        window.scrollTo({ top: 0, behavior: 'auto' });
+        // Пробуем найти и проскроллить основной контейнер если есть
+        const mainScroll = document.querySelector('main, [class*="scroll" i], [class*="feed" i]');
+        if (mainScroll && mainScroll.scrollTop > 0) {
+            mainScroll.scrollTo({ top: 0, behavior: 'auto' });
+        }
+        await sleep(500);
+        
         // СТРАТЕГИЯ 1: Находим текст "Подписки", потом ищем КНОПКУ/СТРЕЛКУ рядом с ним
         const allElements = document.querySelectorAll('span, div, button, a, h1, h2, h3');
         let feedLabelEl = null;
@@ -245,7 +257,8 @@
             const text = (el.textContent || '').trim().toLowerCase();
             if (text === 'подписки' || text === 'following' || text === 'feeds') {
                 const rect = el.getBoundingClientRect();
-                if (rect.top < 200 && rect.width > 20) {
+                // Должен быть ВИДИМ в верхней части экрана (0-200px), а не за пределами
+                if (rect.top >= 0 && rect.top < 200 && rect.width > 20) {
                     feedLabelEl = el;
                     feedLabelRect = rect;
                     log('   📌 Найден текст ленты: [' + el.textContent.trim() + '] top=' + Math.round(rect.top));
