@@ -1,6 +1,6 @@
-// Strakudos Bot v1.4.5 - Fix club switching after 10 already-liked, proper cycle exit
+// Strakudos Bot v1.4.6 - Scroll clubs/search to load more clubs via infinite scroll
 (function() {
-    console.log("[KudosBot] Loading bot v1.4.5...");
+    console.log("[KudosBot] Loading bot v1.4.6...");
     if (window.kudosBotRunning) {
         console.log("Бот уже запущен.");
         return;
@@ -1379,53 +1379,55 @@
             
             let currentIndex = parseInt(localStorage.getItem('sk_index') || '0');
             
-            // Собираем клубы со страницы
-            const found = getClubLinksFromPage();
-            log('Найдено клубов на странице: ' + found.length);
+            // Собираем клубы со страницы (с прокруткой для infinite scroll)
+            let scrollAttempts = 0;
+            let lastScrollY = window.scrollY;
+            const maxScrollAttempts = 20;
             
-            if (found.length > 0) {
-                // Добавляем новые клубы в список
-                for (const club of found) {
-                    if (!clubs.includes(club)) {
-                        clubs.push(club);
+            while (scrollAttempts < maxScrollAttempts) {
+                const found = getClubLinksFromPage();
+                let newClubsFound = 0;
+                
+                if (found.length > 0) {
+                    for (const club of found) {
+                        if (!clubs.includes(club)) {
+                            clubs.push(club);
+                            newClubsFound++;
+                        }
+                    }
+                    
+                    if (newClubsFound > 0) {
+                        localStorage.setItem('sk_clubs', JSON.stringify(clubs));
+                        log('Найдено новых клубов: ' + newClubsFound + ', всего: ' + clubs.length);
                     }
                 }
-                localStorage.setItem('sk_clubs', JSON.stringify(clubs));
-                log('Всего в списке: ' + clubs.length);
+                
+                // Прокручиваем вниз для загрузки еще
+                window.scrollBy({ top: 800, behavior: 'auto' });
+                await sleep(3000);
+                scrollAttempts++;
+                
+                // Проверяем, изменился ли скролл
+                if (window.scrollY === lastScrollY) {
+                    log('Конец списка клубов (скролл не изменился)');
+                    break;
+                }
+                lastScrollY = window.scrollY;
             }
             
-            // Если список пуст - прокручиваем чтобы загрузить больше
-            if (clubs.length === 0 || (currentIndex >= clubs.length && found.length === 0)) {
-                log('Прокручиваю для загрузки клубов...');
-                window.scrollTo(0, document.body.scrollHeight);
-                await sleep(3000);
-                
-                const newFound = getClubLinksFromPage();
-                for (const club of newFound) {
-                    if (!clubs.includes(club)) {
-                        clubs.push(club);
-                    }
-                }
-                
-                if (clubs.length > 0) {
-                    localStorage.setItem('sk_clubs', JSON.stringify(clubs));
-                    currentIndex = 0;
-                    localStorage.setItem('sk_index', '0');
-                } else {
-                    log('Клубы не найдены. Сброс и попытка через 30с...');
-                    localStorage.removeItem('sk_clubs');
-                    localStorage.removeItem('sk_visited');
-                    localStorage.removeItem('sk_index');
-                    await sleep(30000);
-                    window.location.reload();
-                    return;
-                }
+            log('Всего клубов в списке: ' + clubs.length);
+            
+            // Если список пуст — ждем и пробуем снова
+            if (clubs.length === 0) {
+                log('Клубы не найдены. Жду 10с и пробую снова...');
+                await sleep(10000);
+                return;
             }
             
             // Проверяем, все ли клубы посещены
             const allVisited = clubs.every(club => visitedSet.has(club));
             if (allVisited) {
-                log('Все клубы уже посещены, сбрасываю для нового цикла');
+                log('Все ' + clubs.length + ' клубов уже посещены, сбрасываю для нового цикла');
                 visited = [];
                 visitedSet.clear();
                 localStorage.setItem('sk_visited', JSON.stringify([]));
