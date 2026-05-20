@@ -1,6 +1,6 @@
-// Strakudos Bot v1.4.7 - Fix getClubLinksFromPage regex to match any /clubs/ID format
+// Strakudos Bot v1.4.8 - Fix getClubLinksFromPage: match text slugs like /clubs/wildsiberia
 (function() {
-    console.log("[KudosBot] Loading bot v1.4.7...");
+    console.log("[KudosBot] Loading bot v1.4.8...");
     if (window.kudosBotRunning) {
         console.log("Бот уже запущен.");
         return;
@@ -386,13 +386,16 @@
         
         for (const link of links) {
             const href = link.getAttribute('href') || '';
-            // Ищем ID клуба в ссылке — любой формат: /clubs/12345, /clubs/12345?x=1, /clubs/12345/feed
-            const match = href.match(/\/clubs\/(\d+)/);
+            // Ищем ID или slug клуба: /clubs/12345, /clubs/wildsiberia, /clubs/barnaul-cycling
+            // Исключаем /clubs/search, /clubs/join, и другие системные пути
+            const match = href.match(/\/clubs\/([a-zA-Z0-9_-]+)/);
             if (match) {
-                const clubId = match[1];
-                if (!seen.has(clubId)) {
-                    seen.add(clubId);
-                    clubs.push('/clubs/' + clubId);
+                const clubSlug = match[1];
+                // Исключаем системные пути
+                if (clubSlug === 'search' || clubSlug === 'join' || clubSlug === 'create') continue;
+                if (!seen.has(clubSlug)) {
+                    seen.add(clubSlug);
+                    clubs.push('/clubs/' + clubSlug);
                 }
             }
         }
