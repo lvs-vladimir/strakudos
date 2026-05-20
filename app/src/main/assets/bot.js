@@ -543,7 +543,8 @@
         let totalLiked = 0;
         let scrollAttempts = 0;
         let lastY = window.scrollY;
-        const maxScrolls = 20;
+        const maxScrolls = 30; // Увеличено для прокрутки длинных лент
+        const processedThisSession = new Set(); // Тренировки, обработанные в этой сессии (не лайкать повторно)
         
         log('Начинаю лайкать тренировки в клубе...');
         
@@ -562,6 +563,7 @@
             const buttons = findKudosButtons();
             log('Найдено кнопок лайков: ' + buttons.length);
             let likedInCycle = 0;
+            let skippedInCycle = 0;
             
             for (let i = 0; i < buttons.length; i++) {
                 const item = buttons[i];
@@ -569,22 +571,29 @@
                 const actId = item.actId;
                 if (window.kudosBotShouldStop) break;
                 
-                // Упрощенная проверка — кнопка должна быть видимой и иметь размер
+                // Пропускаем если уже обрабатывали в этой сессии (для предотвращения дублирования)
+                if (actId && processedThisSession.has(actId)) {
+                    skippedInCycle++;
+                    continue;
+                }
+                
+                // Проверяем что элемент в пределах экрана
                 const btnRect = btn.getBoundingClientRect();
                 if (btnRect.width === 0 || btnRect.height === 0) continue;
                 
-                // Проверяем что кнопка в пределах экрана (с небольшим допуском)
-                const isVisible = btnRect.top < window.innerHeight + 100 && btnRect.bottom > -100;
-                if (!isVisible) continue;
+                // Элемент должен быть видимым на экране (или близко к краю)
+                const isOnScreen = btnRect.top < window.innerHeight && btnRect.bottom > 0;
+                if (!isOnScreen) continue;
                 
                 const athlete = findAthleteName(btn);
-                log('Лайкаю: ' + athlete + ' (кнопка: ' + Math.round(btnRect.left) + ',' + Math.round(btnRect.top) + ')');
                 
                 // Скроллим к кнопке если она близко к краю
-                if (btnRect.top < 100 || btnRect.bottom > window.innerHeight - 100) {
+                if (btnRect.top < 200 || btnRect.bottom > window.innerHeight - 200) {
                     btn.scrollIntoView({ behavior: 'auto', block: 'center' });
-                    await sleep(500);
+                    await sleep(600);
                 }
+                
+                log('Лайкаю: ' + athlete + ' (кнопка: ' + Math.round(btnRect.left) + ',' + Math.round(btnRect.top) + ')');
                 
                 const min = window.kudosMinDelay || 3000;
                 const max = window.kudosMaxDelay || 8000;
@@ -613,7 +622,10 @@
                 }
                 
                 if (clicked) {
-                    if (actId) window.likedActivities.add(actId);
+                    if (actId) {
+                        window.likedActivities.add(actId);
+                        processedThisSession.add(actId); // Отмечаем что обработали
+                    }
                     log('✅ Лайк: ' + athlete);
                     updateStats(athlete);
                     likedInCycle++;
@@ -624,19 +636,27 @@
                 }
             }
             
-            log('Лайкнуто в цикле: ' + likedInCycle + ', всего: ' + totalLiked);
+            log('Лайкнуто в цикле: ' + likedInCycle + ', пропущено (дубли): ' + skippedInCycle + ', всего: ' + totalLiked);
             
+            // ВСЕГДА прокручиваем после каждого цикла, чтобы найти новые тренировки
+            window.scrollBy({ top: 1000, behavior: 'auto' });
+            await sleep(1500);
+            scrollAttempts++;
+            
+            // Проверяем, изменился ли скролл
+            if (window.scrollY === lastY) {
+                log('Конец ленты в клубе (скролл не изменился)');
+                break;
+            }
+            lastY = window.scrollY;
+            
+            // Если за цикл не лайкнули ничего нового — проверим, есть ли еще незалайканные
             if (likedInCycle === 0) {
-                // Прокручиваем
-                window.scrollBy({ top: 800, behavior: 'auto' });
-                await sleep(1200);
-                scrollAttempts++;
-                
-                if (window.scrollY === lastY) {
-                    log('Конец ленты в клубе (скролл не изменился)');
-                    break;
+                // Проверяем, есть ли еще тренировки без лайков
+                const remaining = findKudosButtons().filter(b => !b.actId || !window.likedActivities.has(b.actId));
+                if (remaining.length === 0) {
+                    log('Все тренировки в текущей видимой области залайканы');
                 }
-                lastY = window.scrollY;
             }
         }
         
@@ -1278,24 +1298,41 @@
             
             log('На вкладке тренировок (' + window.location.pathname + ')');
             
-            // Проверяем, есть ли тренировки в ленте
-            const activities = document.querySelectorAll('[data-testid="web-feed-entry"], [data-testid="feed-entry"], .activity, .entity-details, .activity-card, [class*="activity" i]');
-            log('Найдено тренировок: ' + activities.length);
+            // Главный цикл лайкания в клубе
+            let totalClubLikes = 0;
+            let emptyCycles = 0;
+            const maxEmptyCycles = 3; // После 3 циклов без лайков — переходим к следующему клубу
             
-            if (activities.length === 0) {
-                log('Нет тренировок в клубе, возвращаюсь к списку');
-                goToNextClub();
-                return;
-            }
-            
-            // Лайкаем и прокручиваем
-            const liked = await scrollAndLikeClubFeed();
-            log('Всего лайкнуто в клубе: ' + liked);
-            
-            // Если лайков мало или ноль - лента закончилась
-            if (liked < 2) {
-                log('Лента в клубе закончилась, перехожу к следующему');
-                goToNextClub();
+            while (!window.kudosBotShouldStop) {
+                // Проверяем, есть ли тренировки в ленте
+                const activities = document.querySelectorAll('[data-testid="web-feed-entry"], [data-testid="feed-entry"]');
+                log('Найдено тренировок: ' + activities.length);
+                
+                if (activities.length === 0) {
+                    log('Нет тренировок в клубе, возвращаюсь к списку');
+                    goToNextClub();
+                    return;
+                }
+                
+                // Лайкаем и прокручиваем
+                const liked = await scrollAndLikeClubFeed();
+                totalClubLikes += liked;
+                log('Всего лайкнуто в клубе: ' + totalClubLikes);
+                
+                if (liked === 0) {
+                    emptyCycles++;
+                    log('Пустой цикл (' + emptyCycles + '/' + maxEmptyCycles + ')');
+                    if (emptyCycles >= maxEmptyCycles) {
+                        log('Лента в клубе закончилась, перехожу к следующему клубу');
+                        goToNextClub();
+                        return;
+                    }
+                } else {
+                    emptyCycles = 0;
+                }
+                
+                // Пауза между циклами
+                await sleep(3000);
             }
             
             return;
