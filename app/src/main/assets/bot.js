@@ -1180,15 +1180,35 @@
                 }
             }
             
+            // Проверяем, все ли клубы посещены
+            const allVisited = clubs.every(club => visitedSet.has(club));
+            if (allVisited) {
+                log('Все клубы уже посещены, сбрасываю для нового цикла');
+                visited = [];
+                visitedSet.clear();
+                localStorage.setItem('sk_visited', JSON.stringify([]));
+                currentIndex = 0;
+            }
+            
+            // Если индекс за пределами — сбрасываем
+            if (currentIndex >= clubs.length) {
+                currentIndex = 0;
+            }
+            
             // Находим следующий непосещенный клуб
             let nextClub = null;
-            while (currentIndex < clubs.length) {
-                const club = clubs[currentIndex];
+            let startIndex = currentIndex;
+            let checked = 0;
+            
+            while (checked < clubs.length) {
+                const idx = (startIndex + checked) % clubs.length;
+                const club = clubs[idx];
                 if (!visitedSet.has(club)) {
                     nextClub = club;
+                    currentIndex = idx;
                     break;
                 }
-                currentIndex++;
+                checked++;
             }
             
             if (nextClub) {
@@ -1198,8 +1218,10 @@
                 // Ищем ссылку на странице
                 const link = document.querySelector('a[href="' + nextClub + '"]');
                 if (link) {
+                    log('Кликаю на ссылку клуба на странице');
                     simulateClick(link);
                 } else {
+                    log('Ссылка не найдена на странице, прямой переход');
                     window.location.href = 'https://www.strava.com' + nextClub;
                 }
                 await sleep(5000);
