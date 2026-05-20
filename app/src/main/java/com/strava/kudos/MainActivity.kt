@@ -3,6 +3,7 @@ package com.strava.kudos
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -16,6 +17,8 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 
 class MainActivity : AppCompatActivity() {
+
+    private val TAG = "Strakudos"
 
     private lateinit var webView: WebView
     private lateinit var tvStatus: TextView
@@ -33,6 +36,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d(TAG, "onCreate called, savedInstanceState=${savedInstanceState != null}")
         setContentView(R.layout.activity_main)
 
         webView = findViewById(R.id.webView)
@@ -49,6 +53,7 @@ class MainActivity : AppCompatActivity() {
         val savedStrategy = sharedPref.getString("strategy", "smart") ?: "smart"
         kudosCount = sharedPref.getInt("kudos_count", 0)
         isBotRunning = sharedPref.getBoolean("is_bot_running", false)
+        Log.d(TAG, "Restored isBotRunning=$isBotRunning")
         tvStats.text = kudosCount.toString()
         updateStrategyText(savedStrategy)
 
@@ -77,6 +82,7 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
+                Log.d(TAG, "onPageFinished: url=$url, isBotRunning=$isBotRunning")
                 
                 // Сохраняем текущий URL для восстановления после пересоздания Activity
                 if (url != null) {
@@ -92,6 +98,7 @@ class MainActivity : AppCompatActivity() {
                     btnToggle.isEnabled = true
                     btnToggle.alpha = 1.0f
                     if (isBotRunning) {
+                        Log.d(TAG, "Dashboard loaded, bot was running, restarting...")
                         restartBot()
                     }
                 } else {
@@ -150,6 +157,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        Log.d(TAG, "onResume called")
         webView.onResume()
         webView.resumeTimers()
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
@@ -159,6 +167,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        Log.d(TAG, "onPause called, isBotRunning=$isBotRunning")
         // Если бот работает, НЕ останавливаем WebView — он должен работать в фоне
         if (!isBotRunning) {
             webView.onPause()
@@ -166,8 +175,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStop() {
+        super.onStop()
+        Log.d(TAG, "onStop called")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Log.d(TAG, "onDestroy called")
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
+        Log.d(TAG, "onSaveInstanceState called")
         // Сохраняем URL на случай если система уничтожит Activity
         outState.putString("last_url", webView.url)
         // Сохраняем состояние WebView (история, скролл и т.д.)
@@ -176,11 +196,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onRestoreInstanceState(savedInstanceState: Bundle) {
         super.onRestoreInstanceState(savedInstanceState)
+        Log.d(TAG, "onRestoreInstanceState called")
         // Восстанавливаем состояние WebView
         webView.restoreState(savedInstanceState)
     }
 
     override fun onBackPressed() {
+        Log.d(TAG, "onBackPressed called, moveTaskToBack")
         // Сворачиваем приложение вместо уничтожения Activity
         moveTaskToBack(true)
     }
@@ -197,6 +219,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startBot() {
+        Log.d(TAG, "startBot called")
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
         val minMs = sharedPref.getInt("min_delay", 5000)
         val maxMs = sharedPref.getInt("max_delay", 12000)
@@ -225,6 +248,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopBot() {
+        Log.d(TAG, "stopBot called")
         webView.evaluateJavascript("window.kudosBotShouldStop = true;", null)
         isBotRunning = false
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
@@ -244,6 +268,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun restartBot() {
+        Log.d(TAG, "restartBot called")
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
         val minMs = sharedPref.getInt("min_delay", 5000)
         val maxMs = sharedPref.getInt("max_delay", 12000)
