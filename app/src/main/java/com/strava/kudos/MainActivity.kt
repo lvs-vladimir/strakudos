@@ -107,15 +107,19 @@ class MainActivity : AppCompatActivity() {
 
         webView.addJavascriptInterface(BotJavascriptInterface(), "AndroidApp")
 
-        // Загружаем сохраненный URL если он есть (например после пересоздания Activity),
-        // иначе загружаем страницу входа
-        val savedUrl = savedInstanceState?.getString("last_url") 
-            ?: sharedPref.getString("last_url", null)
-        if (savedUrl != null && savedUrl.contains("strava.com")) {
-            webView.loadUrl(savedUrl)
-        } else {
-            webView.loadUrl("https://www.strava.com/login")
+        // Если Activity пересоздана системой (смена ориентации, нехватка памяти и т.д.),
+        // WebView восстановит свое состояние сама через restoreState в onRestoreInstanceState.
+        // В этом случае НЕ загружаем URL заново.
+        // Если это первый запуск — загружаем сохраненный URL или страницу входа.
+        if (savedInstanceState == null) {
+            val savedUrl = sharedPref.getString("last_url", null)
+            if (savedUrl != null && savedUrl.contains("strava.com")) {
+                webView.loadUrl(savedUrl)
+            } else {
+                webView.loadUrl("https://www.strava.com/login")
+            }
         }
+        // Если savedInstanceState != null, WebView восстановит состояние сама
 
         btnToggle.setOnClickListener {
             if (isBotRunning) {
@@ -166,6 +170,14 @@ class MainActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
         // Сохраняем URL на случай если система уничтожит Activity
         outState.putString("last_url", webView.url)
+        // Сохраняем состояние WebView (история, скролл и т.д.)
+        webView.saveState(outState)
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        // Восстанавливаем состояние WebView
+        webView.restoreState(savedInstanceState)
     }
 
     override fun onBackPressed() {
