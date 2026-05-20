@@ -78,6 +78,14 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 
+                // Сохраняем текущий URL для восстановления после пересоздания Activity
+                if (url != null) {
+                    with(sharedPref.edit()) {
+                        putString("last_url", url)
+                        apply()
+                    }
+                }
+                
                 if (url != null && url.contains("strava.com/dashboard")) {
                     tvStatus.text = if (isBotRunning) "РАБОТАЕТ" else "ВХОД ВЫПОЛНЕН (ГОТОВ)"
                     tvStatus.setTextColor(android.graphics.Color.parseColor("#00F0FF"))
@@ -99,7 +107,15 @@ class MainActivity : AppCompatActivity() {
 
         webView.addJavascriptInterface(BotJavascriptInterface(), "AndroidApp")
 
-        webView.loadUrl("https://www.strava.com/login")
+        // Загружаем сохраненный URL если он есть (например после пересоздания Activity),
+        // иначе загружаем страницу входа
+        val savedUrl = savedInstanceState?.getString("last_url") 
+            ?: sharedPref.getString("last_url", null)
+        if (savedUrl != null && savedUrl.contains("strava.com")) {
+            webView.loadUrl(savedUrl)
+        } else {
+            webView.loadUrl("https://www.strava.com/login")
+        }
 
         btnToggle.setOnClickListener {
             if (isBotRunning) {
@@ -144,6 +160,12 @@ class MainActivity : AppCompatActivity() {
             webView.onPause()
             webView.pauseTimers()
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // Сохраняем URL на случай если система уничтожит Activity
+        outState.putString("last_url", webView.url)
     }
 
     override fun onBackPressed() {
@@ -220,6 +242,17 @@ class MainActivity : AppCompatActivity() {
         if (botScript.isNotEmpty()) {
             webView.evaluateJavascript(botScript, null)
         }
+        
+        // Восстанавливаем UI и запускаем сервис (на случай если Activity была пересоздана)
+        touchOverlay.visibility = android.view.View.VISIBLE
+        tvStatus.text = "РАБОТАЕТ"
+        tvStatus.setTextColor(android.graphics.Color.parseColor("#00F0FF"))
+        btnToggle.text = "СТОП"
+        btnToggle.setBackgroundResource(R.drawable.btn_secondary_bg)
+        btnToggle.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
+        
+        // Перезапускаем Foreground Service если он не запущен
+        startService(Intent(this, KudosService::class.java))
     }
 
     private fun readAssetFile(fileName: String): String {
