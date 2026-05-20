@@ -73,12 +73,13 @@ class KudosService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Strakudos Automation",
-                NotificationManager.IMPORTANCE_HIGH
+                NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "Уведомление о работе бота автолайков"
                 setShowBadge(false)
                 enableLights(false)
                 enableVibration(false)
+                setSound(null, null)
             }
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
@@ -163,9 +164,9 @@ class KudosService : Service() {
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(openIntent)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
 
         // Добавляем действия
         builder.addAction(0, "Открыть", openIntent)
