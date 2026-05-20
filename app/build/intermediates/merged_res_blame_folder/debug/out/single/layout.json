@@ -1,0 +1,10 @@
+[
+    {
+        "merged": "com.strava.kudos.app-mergeDebugResources-30:/layout/activity_main.xml",
+        "source": "com.strava.kudos.app-main-33:/layout/activity_main.xml"
+    },
+    {
+        "merged": "/home/lvs/.gradle/daemon/8.4/com.strava.kudos.app-mergeDebugResources-30:/layout/activity_main.xml",
+        "source": "/home/lvs/.gradle/daemon/8.4/com.strava.kudos.app-main-33:/layout/activity_main.xml"
+    }
+]
