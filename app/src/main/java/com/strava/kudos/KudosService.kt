@@ -97,9 +97,9 @@ class KudosService : Service() {
     private fun updateNotification(count: Int) {
         try {
             val notification = buildNotification(count)
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.notify(NOTIFICATION_ID, notification)
-            Log.d("KudosService", "Notification updated with count=$count")
+            // Для foreground service обязательно использовать startForeground() для обновления
+            startForeground(NOTIFICATION_ID, notification)
+            Log.d("KudosService", "Notification updated with count=$count via startForeground")
         } catch (e: Exception) {
             Log.e("KudosService", "Error updating notification: ${e.message}")
         }
