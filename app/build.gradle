@@ -11,15 +11,15 @@ android {
         applicationId "com.strava.kudos"
         minSdk 24
         targetSdk 34
-        versionCode 140
-        versionName "1.4.0"
+        versionCode 141
+        versionName "1.4.1"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     applicationVariants.all { variant ->
         variant.outputs.all {
-            outputFileName = "strakudos-v1.4.0.apk"
+            outputFileName = "strakudos-v1.4.1.apk"
         }
     }
 

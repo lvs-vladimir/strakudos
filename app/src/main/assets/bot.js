@@ -518,7 +518,7 @@
         let scrollAttempts = 0;
         let lastY = window.scrollY;
         const maxScrolls = 50;
-        const processedCards = new WeakSet();
+        const processedCardIds = new Set(); // Используем ID активности, а не DOM-ссылки!
         
         log('Начинаю лайкать тренировки в клубе...');
         
@@ -531,15 +531,20 @@
             const cards = document.querySelectorAll('[data-testid="web-feed-entry"], [data-testid="feed-entry"]');
             log('Найдено карточек: ' + cards.length);
             
-            let processedCount = 0;
+            let newCardsCount = 0;
+            let skippedCardsCount = 0;
             
             for (const card of cards) {
                 if (window.kudosBotShouldStop) break;
-                if (processedCards.has(card)) {
-                    processedCount++;
+                
+                // Получаем уникальный ID карточки
+                const cardId = getActivityIdFromCard(card);
+                if (cardId && processedCardIds.has(cardId)) {
+                    skippedCardsCount++;
                     continue;
                 }
-                processedCards.add(card);
+                if (cardId) processedCardIds.add(cardId);
+                newCardsCount++;
                 
                 // Скроллим к карточке
                 card.scrollIntoView({ behavior: 'auto', block: 'center' });
@@ -634,10 +639,10 @@
                 }
             }
             
-            log('Обработано карточек: ' + processedCount + '/' + cards.length + ', лайкнуто: ' + totalLiked);
+            log('Новых карточек: ' + newCardsCount + ', пропущено (уже обработано): ' + skippedCardsCount + ', лайкнуто: ' + totalLiked);
             
-            // Если все карточки на экране обработаны — прокручиваем вниз
-            if (processedCount >= cards.length) {
+            // Если НЕТ новых карточек — прокручиваем вниз для загрузки новых
+            if (newCardsCount === 0) {
                 log('Все видимые карточки обработаны, прокручиваю вниз...');
                 window.scrollBy({ top: 800, behavior: 'auto' });
                 await sleep(5000);

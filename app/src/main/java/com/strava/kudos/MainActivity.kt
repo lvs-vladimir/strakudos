@@ -37,6 +37,7 @@ class MainActivity : AppCompatActivity() {
 
     private var kudosCount = 0
     private var isBotRunning = false
+    private var lastBotRestartTime = 0L
 
     private val serviceStopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -132,7 +133,7 @@ class MainActivity : AppCompatActivity() {
                             if (isBotRunning) {
                                 restartBot()
                             }
-                        }, 2000)
+                        }, 3000)
                     }
                 } else {
                     tvStatus.text = "ОЖИДАНИЕ ВХОДА"
@@ -197,13 +198,18 @@ class MainActivity : AppCompatActivity() {
         val strategy = sharedPref.getString("strategy", "smart") ?: "smart"
         updateStrategyText(strategy)
 
-        // Если бот был запущен и страница загружена — перезапускаем бота
+        // Если бот был запущен и страница загружена — перезапускаем бота (с debounce)
         if (isBotRunning) {
             val currentUrl = webView.url
             Log.d(TAG, "onResume: bot was running, checking url=$currentUrl")
             if (currentUrl != null && (currentUrl.contains("strava.com/dashboard") || currentUrl.contains("strava.com/clubs/"))) {
-                Log.d(TAG, "onResume: restarting bot on current page")
-                restartBot()
+                val now = System.currentTimeMillis()
+                if (now - lastBotRestartTime > 5000) {
+                    Log.d(TAG, "onResume: restarting bot on current page")
+                    restartBot()
+                } else {
+                    Log.d(TAG, "onResume: skipping restart (debounce)")
+                }
             }
         }
 
@@ -272,6 +278,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startBot() {
+        val now = System.currentTimeMillis()
+        if (now - lastBotRestartTime < 3000) {
+            Log.d(TAG, "startBot: debounce, skipping")
+            return
+        }
+        lastBotRestartTime = now
         Log.d(TAG, "startBot called")
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
         val minMs = sharedPref.getInt("min_delay", 5000)
@@ -329,6 +341,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun restartBot() {
+        val now = System.currentTimeMillis()
+        if (now - lastBotRestartTime < 5000) {
+            Log.d(TAG, "restartBot: debounce, skipping (last restart was ${(now - lastBotRestartTime)/1000}s ago)")
+            return
+        }
+        lastBotRestartTime = now
         Log.d(TAG, "restartBot called")
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
         val minMs = sharedPref.getInt("min_delay", 5000)
