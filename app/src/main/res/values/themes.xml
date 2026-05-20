@@ -2,9 +2,13 @@
 <resources>
     <!-- Base application theme. -->
     <style name="Theme.StravaKudos" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <item name="colorPrimary">#FC5200</item> <!-- Strava Orange -->
+        <item name="colorPrimary">#FC5200</item>
         <item name="colorSecondary">#E64A19</item>
         <item name="android:statusBarColor">#FC5200</item>
+    </style>
+
+    <style name="NavMenuText" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColor">#FFFFFF</item>
     </style>
 </resources>

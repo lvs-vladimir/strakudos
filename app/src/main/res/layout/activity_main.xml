@@ -292,7 +292,8 @@
         android:layout_gravity="start"
         android:background="#0A0A0A"
         app:itemTextColor="#FFFFFF"
-        app:itemIconTint="#00F0FF"
+        app:itemIconTint="#FFFFFF"
+        app:itemTextAppearance="@style/NavMenuText"
         app:headerLayout="@layout/nav_header"
         app:menu="@menu/nav_menu" />
 
