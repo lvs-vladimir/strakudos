@@ -1,6 +1,6 @@
-// Strakudos Bot v1.4.6 - Scroll clubs/search to load more clubs via infinite scroll
+// Strakudos Bot v1.4.7 - Fix getClubLinksFromPage regex to match any /clubs/ID format
 (function() {
-    console.log("[KudosBot] Loading bot v1.4.6...");
+    console.log("[KudosBot] Loading bot v1.4.7...");
     if (window.kudosBotRunning) {
         console.log("Бот уже запущен.");
         return;
@@ -380,14 +380,14 @@
     }
     
     function getClubLinksFromPage() {
-        const links = document.querySelectorAll('a[href^="/clubs/"]');
+        const links = document.querySelectorAll('a[href*="/clubs/"]');
         const clubs = [];
         const seen = new Set();
         
         for (const link of links) {
             const href = link.getAttribute('href') || '';
-            // Берем только прямые ссылки на клубы: /clubs/12345
-            const match = href.match(/^\/clubs\/(\d+)$/);
+            // Ищем ID клуба в ссылке — любой формат: /clubs/12345, /clubs/12345?x=1, /clubs/12345/feed
+            const match = href.match(/\/clubs\/(\d+)/);
             if (match) {
                 const clubId = match[1];
                 if (!seen.has(clubId)) {
@@ -396,6 +396,9 @@
                 }
             }
         }
+        
+        log('Найдено ссылок на клубы: ' + clubs.length);
+        clubs.forEach(c => log('  - ' + c));
         
         return clubs;
     }
