@@ -98,8 +98,13 @@ class MainActivity : AppCompatActivity() {
                     btnToggle.isEnabled = true
                     btnToggle.alpha = 1.0f
                     if (isBotRunning) {
-                        Log.d(TAG, "Dashboard loaded, bot was running, restarting...")
-                        restartBot()
+                        Log.d(TAG, "Dashboard loaded, bot was running, will restart in 2s...")
+                        // Даем React-приложению время отрендерить контент перед запуском бота
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            if (isBotRunning) {
+                                restartBot()
+                            }
+                        }, 2000)
                     }
                 } else {
                     tvStatus.text = "ОЖИДАНИЕ ВХОДА"
