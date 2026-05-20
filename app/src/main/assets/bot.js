@@ -6,7 +6,6 @@
     window.kudosBotRunning = true;
     window.kudosBotShouldStop = false;
     
-    // Восстанавливаем likedActivities из localStorage
     try {
         const saved = localStorage.getItem('strakudos_liked');
         window.likedActivities = saved ? new Set(JSON.parse(saved)) : new Set();
@@ -29,84 +28,22 @@
         return new Promise(r => setTimeout(r, ms));
     }
 
-    function saveLikedActivities() {
+    function saveLiked() {
         try {
             localStorage.setItem('strakudos_liked', JSON.stringify([...window.likedActivities]));
         } catch(e) {}
     }
-
-    // Сохраняем likedActivities периодически
-    setInterval(() => {
-        saveLikedActivities();
-    }, 30000);
+    setInterval(saveLiked, 30000);
 
     function isInViewport(el) {
         const rect = el.getBoundingClientRect();
         return rect.top >= 60 && rect.bottom <= (window.innerHeight - 60);
     }
 
-    function closeModals() {
-        const selectors = [
-            '[class*="modal" i]', '[class*="dialog" i]', '[class*="overlay" i]',
-            '[role="dialog"]', '[data-testid*="modal" i]', '[class*="lightbox" i]'
-        ];
-        selectors.forEach(sel => {
-            document.querySelectorAll(sel).forEach(el => {
-                const style = window.getComputedStyle(el);
-                if (style.display !== 'none' && style.visibility !== 'hidden') {
-                    const closeBtn = el.querySelector('button[class*="close" i], button[aria-label*="close" i], [data-testid*="close" i]');
-                    if (closeBtn) closeBtn.click();
-                    el.style.display = 'none';
-                }
-            });
-        });
-    }
-
-    function findAthleteName(btn) {
-        try {
-            const card = btn.closest('[data-testid="web-feed-entry"]') || 
-                        btn.closest('.activity') || 
-                        btn.closest('.feed-entry') || 
-                        btn.closest('article') ||
-                        btn.closest('div[class*="card" i]') ||
-                        btn.closest('[class*="entry" i]');
-            
-            if (!card) return "Неизвестный";
-            
-            const nameEl = card.querySelector('[data-testid="owners-name"]') || 
-                          card.querySelector('a[href*="/athletes/"]') ||
-                          card.querySelector('[class*="athlete" i] a') ||
-                          card.querySelector('strong a');
-            
-            return nameEl ? nameEl.textContent.trim().substring(0, 25) : "Неизвестный";
-        } catch(e) {
-            return "Неизвестный";
-        }
-    }
-
-    function getActivityId(btn) {
-        try {
-            const card = btn.closest('[data-testid="web-feed-entry"]') || 
-                        btn.closest('.activity') || 
-                        btn.closest('article');
-            if (!card) return null;
-            
-            const link = card.querySelector('a[href*="/activities/"]');
-            if (link) {
-                const match = link.href.match(/\/activities\/(\d+)/);
-                if (match) return match[1];
-            }
-            
-            return card.getAttribute('data-testid') || card.className;
-        } catch(e) {
-            return null;
-        }
-    }
-
     function findKudosButtons() {
-        const allButtons = document.querySelectorAll('button, [role="button"]');
+        const all = document.querySelectorAll('button, [role="button"]');
         const result = [];
-        allButtons.forEach(btn => {
+        all.forEach(btn => {
             try {
                 if (!btn || btn.disabled) return;
                 const testId = btn.getAttribute('data-testid') || '';
@@ -142,71 +79,94 @@
         return result;
     }
 
+    function getActivityId(btn) {
+        try {
+            const card = btn.closest('[data-testid="web-feed-entry"]') || 
+                        btn.closest('.activity') || 
+                        btn.closest('article');
+            if (!card) return null;
+            const link = card.querySelector('a[href*="/activities/"]');
+            if (link) {
+                const match = link.href.match(/\/activities\/(\d+)/);
+                if (match) return match[1];
+            }
+            return card.getAttribute('data-testid') || card.className;
+        } catch(e) { return null; }
+    }
+
+    function findAthleteName(btn) {
+        try {
+            const card = btn.closest('[data-testid="web-feed-entry"]') || 
+                        btn.closest('.activity') || 
+                        btn.closest('article') ||
+                        btn.closest('div[class*="card" i]');
+            if (!card) return "Неизвестный";
+            const nameEl = card.querySelector('[data-testid="owners-name"]') || 
+                          card.querySelector('a[href*="/athletes/"]') ||
+                          card.querySelector('strong a');
+            return nameEl ? nameEl.textContent.trim().substring(0, 25) : "Неизвестный";
+        } catch(e) { return "Неизвестный"; }
+    }
+
+    function directClick(el) {
+        try {
+            el.click();
+            return true;
+        } catch(e) { return false; }
+    }
+
     function safeClick(el) {
         try {
             const rect = el.getBoundingClientRect();
             if (rect.width === 0 || rect.height === 0) return false;
-            
             const x = rect.left + rect.width / 2;
             const y = rect.top + rect.height / 2;
-            
             const elAtPoint = document.elementFromPoint(x, y);
             if (!elAtPoint) return false;
-            
             const isTarget = (elAtPoint === el || el.contains(elAtPoint) || elAtPoint.contains(el));
             if (!isTarget) return false;
-
             el.click();
             return true;
-        } catch(e) {
-            return false;
-        }
+        } catch(e) { return false; }
     }
 
     async function scrollToTop() {
-        log("Возвращаюсь в начало ленты...");
-        let scrolls = 0;
-        while (window.scrollY > 100 && scrolls < 30) {
+        log("⬆️ Наверх...");
+        let i = 0;
+        while (window.scrollY > 100 && i < 30) {
             if (window.kudosBotShouldStop) return;
-            window.scrollBy({ top: -800, behavior: 'auto' });
-            await sleep(150);
-            scrolls++;
+            window.scrollBy({ top: -1000, behavior: 'auto' });
+            await sleep(100);
+            i++;
         }
         window.scrollTo({ top: 0, behavior: 'auto' });
         await sleep(500);
     }
 
-    async function likeVisibleActivities() {
+    async function likeVisible() {
         const buttons = findKudosButtons();
         let clicked = 0;
-        
         for (const {btn, actId} of buttons) {
             if (window.kudosBotShouldStop) break;
             if (!isInViewport(btn)) continue;
-            
             const rect = btn.getBoundingClientRect();
             const x = rect.left + rect.width / 2;
             const y = rect.top + rect.height / 2;
             const elAtPoint = document.elementFromPoint(x, y);
-            
             if (!elAtPoint || (!btn.contains(elAtPoint) && elAtPoint !== btn)) continue;
             
             const athlete = findAthleteName(btn);
             log(`Лайкаю: ${athlete}`);
             
-            const min = window.kudosMinDelay || 5000;
-            const max = window.kudosMaxDelay || 12000;
-            const range = Math.max(0, max - min);
-            const delay = Math.max(50, Math.floor(Math.random() * range) + min);
-            
+            const min = window.kudosMinDelay || 3000;
+            const max = window.kudosMaxDelay || 8000;
+            const delay = Math.floor(Math.random() * Math.max(0, max - min)) + min;
             if (delay > 500) {
-                log(`Пауза ${(delay/1000).toFixed(2)} сек...`);
+                log(`Пауза ${(delay/1000).toFixed(1)}с...`);
                 await sleep(delay);
             }
             
             if (window.kudosBotShouldStop) break;
-            closeModals();
-            
             if (safeClick(btn)) {
                 if (actId) window.likedActivities.add(actId);
                 log(`✅ Лайк: ${athlete}`);
@@ -215,125 +175,180 @@
                 await sleep(Math.max(100, Math.floor(min / 3)));
             }
         }
-        
         return clicked;
     }
 
     async function scrollAndLike(maxScrolls) {
-        let totalClicked = 0;
+        let total = 0;
         let scrolls = 0;
+        let lastY = window.scrollY;
         
         while (scrolls < maxScrolls && !window.kudosBotShouldStop) {
-            const clicked = await likeVisibleActivities();
-            totalClicked += clicked;
+            const clicked = await likeVisible();
+            total += clicked;
             
             if (clicked === 0) {
-                window.scrollBy({ top: 600, behavior: 'auto' });
-                await sleep(500);
+                window.scrollBy({ top: 500, behavior: 'auto' });
+                await sleep(400);
                 scrolls++;
+                
+                // Проверяем, изменилась ли позиция скролла
+                if (window.scrollY === lastY) {
+                    log("📍 Конец страницы");
+                    break;
+                }
+                lastY = window.scrollY;
+            }
+        }
+        return total;
+    }
+
+    // ====== НАВИГАЦИЯ ПО ЛЕНТАМ ======
+    
+    function getPageFeeds() {
+        // Ищем кнопку/ссылку выбора ленты в верхней части страницы
+        const candidates = [];
+        
+        // Ищем элементы в верхней части страницы (первые 200px)
+        const allElements = document.querySelectorAll('button, a, div, span, [role="button"]');
+        for (const el of allElements) {
+            const rect = el.getBoundingClientRect();
+            if (rect.top > 200) continue; // Только верх страницы
+            if (rect.width < 50 || rect.height < 20) continue;
+            
+            const text = (el.textContent || '').trim();
+            const lower = text.toLowerCase();
+            
+            // Ищем текст типа "Following", "Подписки", "My Clubs", "Мои группы", имя клуба
+            if (lower === 'following' || lower === 'подписки' || 
+                lower === 'my clubs' || lower === 'мои группы' ||
+                lower === 'your clubs' || lower === 'мои клубы' ||
+                lower.includes('clubs') || lower.includes('клубы') ||
+                lower.includes('feed') || lower.includes('лента')) {
+                candidates.push({ el, text, rect });
             }
         }
         
-        return totalClicked;
+        // Возвращаем кандидатов, отсортированных по Y (сверху вниз)
+        return candidates.sort((a, b) => a.rect.top - b.rect.top);
     }
-
-    // ===== ОПРЕДЕЛЕНИЕ ТЕКУЩЕЙ ЛЕНТЫ =====
     
-    function detectCurrentFeed() {
-        const url = window.location.pathname;
+    async function clickFeedSelector() {
+        // Стратегия 1: Ищем элемент с текстом "Подписки" или "Following" вверху
+        const feeds = getPageFeeds();
         
-        if (url.includes('/clubs/') && url.includes('/dashboard')) {
-            const match = url.match(/\/clubs\/(\d+)/);
-            if (match) return { type: 'club', id: match[1] };
+        for (const feed of feeds) {
+            const text = feed.text.toLowerCase();
+            if (text === 'following' || text === 'подписки' || 
+                text === 'my clubs' || text === 'мои группы') {
+                log(`🎯 Найден селектор лент: "${feed.text}"`);
+                directClick(feed.el);
+                await sleep(1500); // Ждем открытия dropdown
+                return true;
+            }
         }
         
-        if (url === '/dashboard' || url === '/dashboard/following' || url === '/') {
-            return { type: 'following' };
-        }
-        
-        return { type: 'unknown' };
-    }
-
-    // ===== РАБОТА С ВЫПАДАЮЩИМ СПИСКОМ ЛЕНТ =====
-    
-    function findFeedSelector() {
-        // Пробуем разные селекторы для кнопки выбора ленты
+        // Стратегия 2: Ищем по data-testid
         const selectors = [
-            '[data-testid*="feed-selector" i]',
-            '[data-testid*="feed" i] button',
+            '[data-testid="feed-selector-toggle"]',
+            '[data-testid="feed-dropdown"]',
+            '[data-testid="club-selector"]',
             '[class*="feed-selector" i]',
-            '[class*="feed-dropdown" i]',
+            '[class*="dropdown-toggle" i]',
             'button[class*="dropdown" i]',
-            '[aria-label*="feed" i]',
-            '[aria-label*="лент" i]',
-            // На Strava часто используется просто кнопка с текстом
-            'button:has-text("Following")',
-            'button:has-text("Подписки")',
         ];
         
         for (const sel of selectors) {
             try {
                 const el = document.querySelector(sel);
-                if (el) return el;
+                if (el) {
+                    log(`🎯 Найден селектор по CSS: ${sel}`);
+                    directClick(el);
+                    await sleep(1500);
+                    return true;
+                }
             } catch(e) {}
         }
         
-        // Ищем по текстовому содержимому
-        const allButtons = document.querySelectorAll('button, a, [role="button"]');
-        for (const btn of allButtons) {
-            const text = btn.textContent?.toLowerCase() || '';
-            if (text.includes('following') || text.includes('подписки') || 
-                text.includes('feed') || text.includes('лента') ||
-                text.includes('clubs') || text.includes('клубы')) {
-                return btn;
+        // Стратегия 3: Ищем aria-expanded или aria-haspopup
+        const toggleButtons = document.querySelectorAll('[aria-expanded], [aria-haspopup="true"]');
+        for (const btn of toggleButtons) {
+            const rect = btn.getBoundingClientRect();
+            if (rect.top < 200 && rect.width > 80) {
+                log(`🎯 Найден toggle button (aria)`);
+                directClick(btn);
+                await sleep(1500);
+                return true;
             }
         }
         
-        return null;
+        log("❌ Селектор лент не найден");
+        return false;
     }
     
-    function findFeedOptions() {
+    function getFeedOptions() {
         const options = [];
         
-        // Ищем все элементы выпадающего списка
-        const selectors = [
-            '[role="menuitem"]',
-            '[role="option"]',
-            '[data-testid*="feed-option" i]',
-            '[class*="dropdown-item" i]',
-            '[class*="menu-item" i]',
-            'li a[href*="/clubs/"]',
-            'li a[href="/dashboard"]',
-            'li a[href="/dashboard/following"]',
+        // Ищем открытый dropdown/menu
+        const menuSelectors = [
+            '[role="menu"]',
+            '[role="listbox"]',
+            '[class*="dropdown-menu" i]',
+            '[class*="menu-list" i]',
+            '[data-testid*="menu" i]',
+            '[data-testid*="dropdown" i]',
         ];
         
-        for (const sel of selectors) {
+        let menuEl = null;
+        for (const sel of menuSelectors) {
             try {
-                const elements = document.querySelectorAll(sel);
-                elements.forEach(el => {
-                    const href = el.getAttribute('href') || el.closest('a')?.getAttribute('href') || '';
-                    const text = el.textContent?.trim() || '';
-                    
-                    if (href.includes('/clubs/') || href === '/dashboard' || href === '/dashboard/following' || 
-                        text.toLowerCase().includes('following') || text.toLowerCase().includes('клуб')) {
-                        if (!options.find(o => o.href === href)) {
-                            options.push({ element: el, href: href, text: text });
-                        }
+                const el = document.querySelector(sel);
+                if (el) {
+                    const style = window.getComputedStyle(el);
+                    if (style.display !== 'none' && style.visibility !== 'hidden') {
+                        menuEl = el;
+                        break;
                     }
-                });
+                }
             } catch(e) {}
         }
         
-        // Если не нашли в стандартных селекторах, ищем все ссылки на клубы и dashboard
-        if (options.length === 0) {
-            const allLinks = document.querySelectorAll('a');
-            for (const link of allLinks) {
-                const href = link.getAttribute('href') || '';
-                const text = link.textContent?.trim() || '';
+        // Если нашли открытое меню, ищем опции внутри
+        if (menuEl) {
+            const items = menuEl.querySelectorAll('[role="menuitem"], [role="option"], a, li, button');
+            for (const item of items) {
+                const text = (item.textContent || '').trim();
+                const href = item.getAttribute('href') || '';
                 
-                if (href.includes('/clubs/') || href === '/dashboard' || href === '/dashboard/following') {
+                // Фильтруем только ленты
+                const isFeed = href.includes('/dashboard') || 
+                              (href.includes('/clubs/') && href.includes('/dashboard')) ||
+                              text.toLowerCase() === 'following' ||
+                              text.toLowerCase() === 'подписки' ||
+                              text.toLowerCase() === 'my clubs' ||
+                              text.toLowerCase() === 'мои группы' ||
+                              text.toLowerCase() === 'your clubs' ||
+                              text.toLowerCase() === 'мои клубы';
+                
+                if (isFeed && text.length > 0) {
+                    options.push({ el: item, text, href });
+                }
+            }
+        }
+        
+        // Также ищем все кликабельные элементы со ссылками на dashboard
+        if (options.length === 0) {
+            const allLinks = document.querySelectorAll('a[href*="/dashboard"], a[href*="/clubs/"]');
+            for (const link of allLinks) {
+                const text = (link.textContent || '').trim();
+                const href = link.getAttribute('href') || '';
+                
+                // Пропускаем ссылки на поиск, настройки и т.д.
+                if (href.includes('/search') || href.includes('/settings')) continue;
+                
+                if (href.includes('/dashboard') || (href.includes('/clubs/') && href.includes('/dashboard'))) {
                     if (!options.find(o => o.href === href)) {
-                        options.push({ element: link, href: href, text: text || 'Feed' });
+                        options.push({ el: link, text, href });
                     }
                 }
             }
@@ -342,171 +357,190 @@
         return options;
     }
     
-    async function openFeedSelector() {
-        const selector = findFeedSelector();
-        if (!selector) {
-            log("Выпадающий список лент не найден");
-            return false;
-        }
+    async function switchToFeed(feedOption) {
+        log(`🔄 Переключаюсь на: ${feedOption.text}`);
         
-        log("Открываю список лент...");
-        safeClick(selector);
-        await sleep(1000);
-        return true;
-    }
-    
-    async function closeFeedSelector() {
-        // Кликаем в пустое место чтобы закрыть dropdown
-        document.body.click();
-        await sleep(300);
-    }
-    
-    async function switchToFeed(href) {
-        // Для SPA используем History API или кликаем на ссылку
-        log(`Переключаюсь на: ${href}`);
+        // Запоминаем текущую позицию скролла
+        const oldScrollY = window.scrollY;
+        const oldUrl = window.location.pathname;
         
-        // Пробуем найти ссылку и кликнуть
-        const links = document.querySelectorAll(`a[href="${href}"]`);
-        for (const link of links) {
-            if (safeClick(link)) {
-                await sleep(2000); // Ждем загрузки контента
-                return true;
-            }
-        }
+        // Кликаем на опцию (прямой клик для dropdown элементов)
+        directClick(feedOption.el);
         
-        // Если не получилось кликнуть, используем History API
-        if (window.history && window.history.pushState) {
-            window.history.pushState({}, '', href);
-            // Триггерим событие popstate чтобы React Router обновил view
-            window.dispatchEvent(new PopStateEvent('popstate'));
-            await sleep(2000);
+        // Ждем пока контент загрузится
+        await sleep(3000);
+        
+        // Проверяем, изменилось ли что-то
+        const newScrollY = window.scrollY;
+        const newUrl = window.location.pathname;
+        
+        if (newUrl !== oldUrl) {
+            log(`✅ URL изменился: ${oldUrl} → ${newUrl}`);
             return true;
         }
         
-        // Последний вариант - просто меняем location (вызывает перезагрузку)
-        window.location.href = 'https://www.strava.com' + href;
-        await sleep(3000);
-        return true;
+        if (Math.abs(newScrollY - oldScrollY) > 50) {
+            log(`✅ Скролл изменился`);
+            return true;
+        }
+        
+        // Проверяем, изменился ли DOM
+        const hasNewContent = document.querySelector('[data-testid="web-feed-entry"]') !== null;
+        if (hasNewContent) {
+            log(`✅ Контент обновлен`);
+            return true;
+        }
+        
+        log(`⚠️ Переключение может не сработать`);
+        return false;
     }
-
-    // ===== СТРАТЕГИЯ КЛУБОВ С НАВИГАЦИЕЙ ПО UI =====
     
     async function runClubsStrategy() {
-        log("Старт стратегии КЛУБЫ (UI навигация)...");
+        log("🏃 Старт стратегии КЛУБЫ...");
         
-        // Пробуем открыть выпадающий список
-        const opened = await openFeedSelector();
-        
+        // Собираем список лент
         let feeds = [];
         
-        if (opened) {
-            // Собираем все доступные ленты из выпадающего списка
-            const options = findFeedOptions();
-            log(`Найдено ${options.length} лент в списке`);
-            
-            feeds = options.map(opt => ({
-                href: opt.href,
-                text: opt.text || opt.href,
-                element: opt.element
-            }));
-            
-            await closeFeedSelector();
-        }
+        // Пробуем открыть dropdown
+        const opened = await clickFeedSelector();
         
-        // Если не нашли через UI, пробуем через URL
-        if (feeds.length === 0) {
-            log("Не удалось найти ленты в UI, пробуем через URL...");
-            feeds = [
-                { href: '/dashboard', text: 'Following' }
-            ];
+        if (opened) {
+            // Собираем опции из открытого dropdown
+            const options = getFeedOptions();
+            log(`📋 Найдено ${options.length} лент в dropdown`);
             
-            // Ищем клубы на странице
-            const clubLinks = document.querySelectorAll('a[href*="/clubs/"]');
-            const clubIds = new Set();
-            clubLinks.forEach(link => {
-                const href = link.getAttribute('href') || '';
-                const match = href.match(/\/clubs\/(\d+)/);
-                if (match && !clubIds.has(match[1])) {
-                    clubIds.add(match[1]);
-                    feeds.push({ 
-                        href: `/clubs/${match[1]}/dashboard`, 
-                        text: link.textContent?.trim() || `Club ${match[1]}` 
+            for (const opt of options) {
+                if (!feeds.find(f => f.href === opt.href)) {
+                    feeds.push({
+                        text: opt.text || 'Лента',
+                        href: opt.href,
+                        el: opt.el
                     });
                 }
-            });
+            }
+            
+            // Закрываем dropdown (кликаем в пустое место)
+            document.body.click();
+            await sleep(500);
         }
         
+        // Если не нашли через dropdown, пробуем найти на странице
         if (feeds.length === 0) {
-            log("Не найдено ни одной ленты. Переключаюсь на умную стратегию.");
+            log("🔍 Ищу ленты на странице...");
+            
+            // Ищем все ссылки на ленты на странице
+            const pageFeeds = getPageFeeds();
+            for (const feed of pageFeeds) {
+                // Получаем href из ближайшей ссылки
+                let href = '';
+                if (feed.el.tagName === 'A') {
+                    href = feed.el.getAttribute('href') || '';
+                } else {
+                    const link = feed.el.closest('a');
+                    if (link) href = link.getAttribute('href') || '';
+                }
+                
+                if (!href) {
+                    // Если нет href, пробуем onclick или data-атрибуты
+                    href = feed.el.getAttribute('data-href') || 
+                           feed.el.getAttribute('data-url') || '';
+                }
+                
+                // Добавляем даже без href — попробуем просто кликнуть
+                if (!feeds.find(f => f.text === feed.text)) {
+                    feeds.push({
+                        text: feed.text,
+                        href: href,
+                        el: feed.el
+                    });
+                }
+            }
+        }
+        
+        // Добавляем основную ленту если её нет
+        const hasMainFeed = feeds.some(f => 
+            f.text.toLowerCase() === 'following' || 
+            f.text.toLowerCase() === 'подписки' ||
+            f.href === '/dashboard' ||
+            f.href === '/dashboard/following'
+        );
+        
+        if (!hasMainFeed) {
+            feeds.unshift({ text: 'Following', href: '/dashboard', el: null });
+        }
+        
+        log(`📊 Всего лент: ${feeds.length}`);
+        feeds.forEach((f, i) => log(`  ${i+1}. ${f.text} (${f.href || 'no href'})`));
+        
+        if (feeds.length <= 1) {
+            log("⚠️ Найдена только 1 лента, переключаюсь на умную стратегию");
             await runSmartStrategy();
             return;
         }
         
-        log(`Ротация между ${feeds.length} лентами: ${feeds.map(f => f.text).join(', ')}`);
-        
         let feedIndex = 0;
-        let cyclesWithoutLikes = 0;
+        let emptyCycles = 0;
         
         while (!window.kudosBotShouldStop) {
             const feed = feeds[feedIndex];
-            log(`=== ${feed.text} (${feed.href}) ===`);
+            log(`\n=== 📰 ${feed.text} ===`);
             
             // Переключаемся на ленту
-            const currentFeed = detectCurrentFeed();
-            const isCurrentFeed = (currentFeed.type === 'following' && feed.href.includes('dashboard')) ||
-                                 (currentFeed.type === 'club' && feed.href.includes(currentFeed.id));
-            
-            if (!isCurrentFeed) {
-                // Открываем селектор и выбираем нужную ленту
-                await openFeedSelector();
-                await sleep(500);
+            if (feed.el) {
+                // Если есть элемент — кликаем на него через dropdown
+                await clickFeedSelector();
+                await sleep(1000);
                 
-                // Ищем ссылку на нужную ленту в открытом dropdown
-                const options = findFeedOptions();
-                const targetOption = options.find(opt => opt.href === feed.href || 
-                    opt.href.includes(feed.href.replace('/dashboard', '')));
+                // Переищем опции (DOM мог измениться)
+                const currentOptions = getFeedOptions();
+                const targetOption = currentOptions.find(o => 
+                    o.text === feed.text || o.href === feed.href
+                );
                 
                 if (targetOption) {
-                    safeClick(targetOption.element);
-                    log(`Выбрана лента: ${feed.text}`);
+                    await switchToFeed(targetOption);
                 } else {
-                    // Если не нашли в dropdown, используем прямую навигацию
-                    await switchToFeed(feed.href);
+                    log(`⚠️ Опция "${feed.text}" не найдена в dropdown, пробую прямой клик`);
+                    directClick(feed.el);
+                    await sleep(3000);
                 }
                 
-                await sleep(2000);
-                await closeFeedSelector();
-            } else {
-                log("Уже на нужной ленте");
+                // Закрываем dropdown если открыт
+                document.body.click();
+                await sleep(500);
+            } else if (feed.href && feed.href !== window.location.pathname) {
+                // Если нет элемента но есть href — переходим по URL
+                log(`🌐 Переход по URL: ${feed.href}`);
+                window.location.href = 'https://www.strava.com' + feed.href;
+                await sleep(4000);
             }
             
             // Лайкаем в текущей ленте
             await scrollToTop();
             await sleep(1000);
             
-            const clicked = await scrollAndLike(15); // Максимум 15 скроллов на ленту
+            const clicked = await scrollAndLike(20);
             
             if (clicked === 0) {
-                cyclesWithoutLikes++;
-                log(`В ленте нет новых записей (${cyclesWithoutLikes}/3)`);
+                emptyCycles++;
+                log(`📭 Пустая лента (${emptyCycles}/3)`);
                 
-                if (cyclesWithoutLikes >= 3) {
-                    log("Все ленты пусты, делаю паузу...");
-                    await sleep(30000); // 30 секунд пауза
-                    cyclesWithoutLikes = 0;
+                if (emptyCycles >= 3) {
+                    log("💤 Все ленты пусты, пауза 30с...");
+                    await sleep(30000);
+                    emptyCycles = 0;
                 }
             } else {
-                cyclesWithoutLikes = 0;
+                emptyCycles = 0;
             }
             
             // Переходим к следующей ленте
             feedIndex = (feedIndex + 1) % feeds.length;
-            log(`Переключаюсь на следующую ленту...`);
             await sleep(2000);
         }
     }
 
-    // ===== ОСТАЛЬНЫЕ СТРАТЕГИИ =====
+    // ====== ОСТАЛЬНЫЕ СТРАТЕГИИ ======
 
     async function runSmartStrategy() {
         log("Старт УМНОЙ стратегии...");
@@ -518,7 +552,7 @@
             cycle++;
             log(`=== Цикл ${cycle} ===`);
             
-            let clicked = await likeVisibleActivities();
+            let clicked = await likeVisible();
             
             if (clicked === 0) {
                 let scrollAttempts = 0;
@@ -530,14 +564,14 @@
                     totalScrolled += scrollAmount;
                     await sleep(Math.max(200, Math.floor(Math.random() * (max() - min())) + min()));
                     
-                    clicked = await likeVisibleActivities();
+                    clicked = await likeVisible();
                     scrollAttempts++;
                 }
                 
                 if (totalScrolled > 3000 || clicked === 0) {
                     log("Достигнут предел ленты");
                     await scrollToTop();
-                    clicked = await likeVisibleActivities();
+                    clicked = await likeVisible();
                     
                     if (clicked === 0 && cycle % 3 === 0) {
                         await refreshFeed();
@@ -559,7 +593,6 @@
         log("Обновляю ленту...");
         window.scrollTo({ top: 0, behavior: 'auto' });
         await sleep(300);
-        
         const refreshBtn = document.querySelector('button[data-testid*="refresh" i], [class*="refresh" i] button');
         if (refreshBtn) {
             refreshBtn.click();
@@ -567,8 +600,6 @@
             await sleep(2000);
             return;
         }
-        
-        log("Pull-to-refresh: скролл вверх...");
         window.scrollTo({ top: -200, behavior: 'smooth' });
         await sleep(1500);
         window.scrollTo({ top: 0, behavior: 'auto' });
@@ -576,15 +607,14 @@
     }
 
     async function runTopOnlyStrategy() {
-        log("Старт стратегии ТОЛЬКО НОВЫЕ...");
+        log("Старт ТОЛЬКО НОВЫЕ...");
         let refreshCount = 0;
         const min = () => window.kudosMinDelay || 5000;
 
         while (!window.kudosBotShouldStop) {
             window.scrollTo({ top: 0, behavior: 'auto' });
             await sleep(500);
-            
-            const clicked = await likeVisibleActivities();
+            const clicked = await likeVisible();
             
             if (clicked === 0) {
                 refreshCount++;
@@ -607,8 +637,8 @@
 
     async function runAggressiveStrategy() {
         log("Старт АГРЕССИВНОЙ стратегии...");
-        let noProgressCount = 0;
-        let lastScrollY = 0;
+        let noProgress = 0;
+        let lastY = 0;
         
         while (!window.kudosBotShouldStop) {
             const buttons = findKudosButtons();
@@ -616,7 +646,6 @@
             
             for (const {btn, actId} of buttons) {
                 if (window.kudosBotShouldStop) break;
-                
                 const athlete = findAthleteName(btn);
                 if (safeClick(btn)) {
                     if (actId) window.likedActivities.add(actId);
@@ -629,22 +658,21 @@
             
             if (window.kudosBotShouldStop) break;
             
-            lastScrollY = window.scrollY;
+            lastY = window.scrollY;
             window.scrollBy({ top: 600, behavior: 'auto' });
             await sleep(500);
             
-            if (window.scrollY === lastScrollY) {
-                noProgressCount++;
-                log(`⬇️ Конец ленты (${noProgressCount}/3)`);
-                
-                if (noProgressCount >= 3) {
-                    log("🔄 Достигнут конец ленты. Возвращаюсь в начало...");
+            if (window.scrollY === lastY) {
+                noProgress++;
+                log(`⬇️ Конец (${noProgress}/3)`);
+                if (noProgress >= 3) {
+                    log("🔄 Возвращаюсь в начало...");
                     await scrollToTop();
-                    noProgressCount = 0;
+                    noProgress = 0;
                     await sleep(3000);
                 }
             } else {
-                noProgressCount = 0;
+                noProgress = 0;
             }
         }
     }
@@ -657,8 +685,7 @@
 
         while (!window.kudosBotShouldStop) {
             cycle++;
-            
-            let clicked = await likeVisibleActivities();
+            let clicked = await likeVisible();
             
             if (clicked === 0) {
                 const scrollAmount = Math.floor(Math.random() * 300) + 200;
@@ -668,7 +695,7 @@
                 log(`Читаю ленту ${(readTime/1000).toFixed(1)} сек...`);
                 await sleep(readTime);
                 
-                clicked = await likeVisibleActivities();
+                clicked = await likeVisible();
                 
                 if (clicked === 0 && cycle % 5 === 0) {
                     log("Делаю большую паузу...");
@@ -682,7 +709,7 @@
         }
     }
 
-    // ===== MAIN LOOP =====
+    // ====== MAIN ======
 
     async function startLoop() {
         switch (STRATEGY) {
