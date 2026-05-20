@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.webkit.JavascriptInterface
@@ -271,7 +272,11 @@ class MainActivity : AppCompatActivity() {
             tvStatus.setTextColor(android.graphics.Color.parseColor("#00F0FF"))
             
             // Запускаем Foreground Service для работы в фоне
-            startService(Intent(this, KudosService::class.java))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                androidx.core.content.ContextCompat.startForegroundService(this, Intent(this, KudosService::class.java))
+            } else {
+                startService(Intent(this, KudosService::class.java))
+            }
         }
     }
 
@@ -317,7 +322,11 @@ class MainActivity : AppCompatActivity() {
         btnToggle.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
         
         // Перезапускаем Foreground Service если он не запущен
-        startService(Intent(this, KudosService::class.java))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            androidx.core.content.ContextCompat.startForegroundService(this, Intent(this, KudosService::class.java))
+        } else {
+            startService(Intent(this, KudosService::class.java))
+        }
     }
 
     private fun readAssetFile(fileName: String): String {

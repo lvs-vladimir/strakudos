@@ -1,6 +1,5 @@
 package com.strava.kudos
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -13,6 +12,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import androidx.core.app.NotificationCompat
 
 class KudosService : Service() {
 
@@ -22,26 +22,23 @@ class KudosService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        Log.d("KudosService", "onCreate called")
         acquireWakeLock()
+        createNotificationChannel()
         startPeriodicUpdate()
     }
 
-    private fun updateNotificationNow() {
-        val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
-        val count = sharedPref.getInt("kudos_count", 0)
-        val notification = buildNotification(count)
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(NOTIFICATION_ID, notification)
-    }
-
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d("KudosService", "onStartCommand called, action=${intent?.action}")
+        
         if (intent?.action == ACTION_STOP) {
             Log.d("KudosService", "Received STOP action, stopping service")
-            // Отправляем broadcast чтобы MainActivity обновила UI
             sendBroadcast(Intent("com.strava.kudos.SERVICE_STOPPED"))
             stopSelf()
             return START_NOT_STICKY
         }
+        
+        // При первом запуске показываем уведомление
         startForeground(NOTIFICATION_ID, buildNotification())
         return START_STICKY
     }
@@ -49,24 +46,63 @@ class KudosService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        Log.d("KudosService", "onDestroy called")
         super.onDestroy()
         releaseWakeLock()
         stopPeriodicUpdate()
     }
 
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Strakudos Automation",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Уведомление о работе бота автолайков"
+                setShowBadge(false)
+                enableLights(false)
+                enableVibration(false)
+            }
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+            Log.d("KudosService", "Notification channel created")
+        }
+    }
+
     private fun startPeriodicUpdate() {
         updateRunnable = object : Runnable {
             override fun run() {
-                updateNotification()
-                handler.postDelayed(this, 5000) // Обновляем каждые 5 секунд
+                val count = getKudosCount()
+                Log.d("KudosService", "Periodic update: count=$count")
+                updateNotification(count)
+                handler.postDelayed(this, 3000) // Обновляем каждые 3 секунды
             }
         }
         handler.post(updateRunnable!!)
+        Log.d("KudosService", "Periodic update started")
     }
 
     private fun stopPeriodicUpdate() {
         updateRunnable?.let { handler.removeCallbacks(it) }
         updateRunnable = null
+        Log.d("KudosService", "Periodic update stopped")
+    }
+
+    private fun getKudosCount(): Int {
+        val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
+        return sharedPref.getInt("kudos_count", 0)
+    }
+
+    private fun updateNotification(count: Int) {
+        try {
+            val notification = buildNotification(count)
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.notify(NOTIFICATION_ID, notification)
+            Log.d("KudosService", "Notification updated with count=$count")
+        } catch (e: Exception) {
+            Log.e("KudosService", "Error updating notification: ${e.message}")
+        }
     }
 
     private fun acquireWakeLock() {
@@ -86,30 +122,7 @@ class KudosService : Service() {
         wakeLock = null
     }
 
-    private fun updateNotification() {
-        val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
-        val count = sharedPref.getInt("kudos_count", 0)
-        val notification = buildNotification(count)
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(NOTIFICATION_ID, notification)
-    }
-
-    private fun buildNotification(count: Int = 0): Notification {
-        val channelId = "strakudos_kudos_channel"
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                "Strakudos Automation",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Уведомление о работе бота автолайков"
-                setShowBadge(false)
-            }
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
-        }
-
+    private fun buildNotification(count: Int = 0): android.app.Notification {
         val openIntent = PendingIntent.getActivity(
             this,
             0,
@@ -128,40 +141,26 @@ class KudosService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val builder = Notification.Builder(this, channelId)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Strakudos — Бот активен")
             .setContentText("Поставлено лайков: $count")
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(openIntent)
             .setOngoing(true)
-            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            builder.setColor(getColor(android.R.color.holo_orange_dark))
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            builder.addAction(
-                Notification.Action.Builder(
-                    null,
-                    "Открыть",
-                    openIntent
-                ).build()
-            )
-            builder.addAction(
-                Notification.Action.Builder(
-                    null,
-                    "Стоп",
-                    stopIntent
-                ).build()
-            )
-        }
+        // Добавляем действия
+        builder.addAction(0, "Открыть", openIntent)
+        builder.addAction(0, "Стоп", stopIntent)
 
         return builder.build()
     }
 
     companion object {
         private const val NOTIFICATION_ID = 1001
+        private const val CHANNEL_ID = "strakudos_kudos_channel"
         const val ACTION_STOP = "STOP_BOT"
     }
 }
