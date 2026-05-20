@@ -20,9 +20,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var tvStatus: TextView
     private lateinit var tvStats: TextView
+    private lateinit var tvStrategy: TextView
     private lateinit var btnToggle: Button
-    private lateinit var etMinDelay: android.widget.EditText
-    private lateinit var etMaxDelay: android.widget.EditText
     private lateinit var touchOverlay: android.view.View
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var navigationView: NavigationView
@@ -39,21 +38,18 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webView)
         tvStatus = findViewById(R.id.tvStatus)
         tvStats = findViewById(R.id.tvStats)
+        tvStrategy = findViewById(R.id.tvStrategy)
         btnToggle = findViewById(R.id.btnToggle)
-        etMinDelay = findViewById(R.id.etMinDelay)
-        etMaxDelay = findViewById(R.id.etMaxDelay)
         touchOverlay = findViewById(R.id.touchOverlay)
         drawerLayout = findViewById(R.id.drawerLayout)
         navigationView = findViewById(R.id.navigationView)
         btnMenu = findViewById(R.id.btnMenu)
 
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
-        val savedMin = sharedPref.getInt("min_delay", 5000)
-        val savedMax = sharedPref.getInt("max_delay", 12000)
+        val savedStrategy = sharedPref.getString("strategy", "smart") ?: "smart"
         kudosCount = sharedPref.getInt("kudos_count", 0)
-        etMinDelay.setText(savedMin.toString())
-        etMaxDelay.setText(savedMax.toString())
         tvStats.text = "ЛАЙКОВ ОТПРАВЛЕНО: $kudosCount"
+        updateStrategyText(savedStrategy)
 
         val settings = webView.settings
         settings.javaScriptEnabled = true
@@ -79,7 +75,6 @@ class MainActivity : AppCompatActivity() {
                         btnToggle.isEnabled = true
                         btnToggle.alpha = 1.0f
                     } else {
-                        // Авто-перезапуск бота после перезагрузки страницы
                         restartBot()
                     }
                 } else {
@@ -110,7 +105,10 @@ class MainActivity : AppCompatActivity() {
         navigationView.setNavigationItemSelectedListener { menuItem ->
             drawerLayout.closeDrawers()
             when (menuItem.itemId) {
-                R.id.nav_strategy -> startActivity(Intent(this, StrategyActivity::class.java))
+                R.id.nav_strategy -> {
+                    startActivity(Intent(this, StrategyActivity::class.java))
+                    // Обновим текст стратегии при возврате
+                }
                 R.id.nav_settings -> startActivity(Intent(this, SettingsActivity::class.java))
                 R.id.nav_logs -> startActivity(Intent(this, LogsActivity::class.java))
                 R.id.nav_about -> startActivity(Intent(this, AboutActivity::class.java))
@@ -119,18 +117,30 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun startBot() {
-        val minMs = etMinDelay.text.toString().toIntOrNull() ?: 5000
-        val maxMs = etMaxDelay.text.toString().toIntOrNull() ?: 12000
-        
+    override fun onResume() {
+        super.onResume()
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
-        with(sharedPref.edit()) {
-            putInt("min_delay", minMs)
-            putInt("max_delay", maxMs)
-            apply()
-        }
-
         val strategy = sharedPref.getString("strategy", "smart") ?: "smart"
+        updateStrategyText(strategy)
+    }
+
+    private fun updateStrategyText(strategy: String) {
+        val strategyName = when (strategy) {
+            "smart" -> "УМНАЯ"
+            "top_only" -> "ТОЛЬКО НОВЫЕ"
+            "aggressive" -> "АГРЕССИВНАЯ"
+            "human" -> "ЧЕЛОВЕЧНАЯ"
+            else -> "УМНАЯ"
+        }
+        tvStrategy.text = "СТРАТЕГИЯ: $strategyName"
+    }
+
+    private fun startBot() {
+        val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
+        val minMs = sharedPref.getInt("min_delay", 5000)
+        val maxMs = sharedPref.getInt("max_delay", 12000)
+        val strategy = sharedPref.getString("strategy", "smart") ?: "smart"
+        
         webView.evaluateJavascript("window.kudosMinDelay = $minMs; window.kudosMaxDelay = $maxMs; window.kudosStrategy = '$strategy';", null)
 
         val botScript = readAssetFile("bot.js")

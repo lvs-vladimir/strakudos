@@ -1,10 +1,12 @@
 package com.strava.kudos
 
 import android.os.Bundle
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.RadioGroup
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.widget.doOnTextChanged
 
 class StrategyActivity : AppCompatActivity() {
 
@@ -15,14 +17,18 @@ class StrategyActivity : AppCompatActivity() {
         val btnBack = findViewById<ImageButton>(R.id.btnBack)
         val radioGroup = findViewById<RadioGroup>(R.id.radioStrategies)
         val tvCurrentSettings = findViewById<TextView>(R.id.tvCurrentSettings)
+        val etMinDelay = findViewById<EditText>(R.id.etMinDelay)
+        val etMaxDelay = findViewById<EditText>(R.id.etMaxDelay)
 
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
         val currentStrategy = sharedPref.getString("strategy", "smart") ?: "smart"
         val kudosCount = sharedPref.getInt("kudos_count", 0)
-        val minDelay = sharedPref.getInt("min_delay", 5000)
-        val maxDelay = sharedPref.getInt("max_delay", 12000)
+        val savedMinDelay = sharedPref.getInt("min_delay", 5000)
+        val savedMaxDelay = sharedPref.getInt("max_delay", 12000)
 
-        // Set current selection
+        etMinDelay.setText(savedMinDelay.toString())
+        etMaxDelay.setText(savedMaxDelay.toString())
+
         when (currentStrategy) {
             "smart" -> radioGroup.check(R.id.radioSmart)
             "top_only" -> radioGroup.check(R.id.radioTopOnly)
@@ -30,7 +36,6 @@ class StrategyActivity : AppCompatActivity() {
             "human" -> radioGroup.check(R.id.radioHuman)
         }
 
-        // Save on change
         radioGroup.setOnCheckedChangeListener { _, checkedId ->
             val strategy = when (checkedId) {
                 R.id.radioSmart -> "smart"
@@ -43,17 +48,39 @@ class StrategyActivity : AppCompatActivity() {
                 putString("strategy", strategy)
                 apply()
             }
-            updateSettingsText(tvCurrentSettings, strategy, minDelay, maxDelay, kudosCount)
+            updateSettingsText(tvCurrentSettings, strategy, etMinDelay, etMaxDelay, kudosCount)
         }
 
-        updateSettingsText(tvCurrentSettings, currentStrategy, minDelay, maxDelay, kudosCount)
+        etMinDelay.doOnTextChanged { _, _, _, _ ->
+            val min = etMinDelay.text.toString().toIntOrNull() ?: 5000
+            val max = etMaxDelay.text.toString().toIntOrNull() ?: 12000
+            with(sharedPref.edit()) {
+                putInt("min_delay", min)
+                putInt("max_delay", max)
+                apply()
+            }
+            updateSettingsText(tvCurrentSettings, sharedPref.getString("strategy", "smart") ?: "smart", etMinDelay, etMaxDelay, kudosCount)
+        }
+
+        etMaxDelay.doOnTextChanged { _, _, _, _ ->
+            val min = etMinDelay.text.toString().toIntOrNull() ?: 5000
+            val max = etMaxDelay.text.toString().toIntOrNull() ?: 12000
+            with(sharedPref.edit()) {
+                putInt("min_delay", min)
+                putInt("max_delay", max)
+                apply()
+            }
+            updateSettingsText(tvCurrentSettings, sharedPref.getString("strategy", "smart") ?: "smart", etMinDelay, etMaxDelay, kudosCount)
+        }
+
+        updateSettingsText(tvCurrentSettings, currentStrategy, etMinDelay, etMaxDelay, kudosCount)
 
         btnBack.setOnClickListener {
             finish()
         }
     }
 
-    private fun updateSettingsText(tv: TextView, strategy: String, minDelay: Int, maxDelay: Int, kudosCount: Int) {
+    private fun updateSettingsText(tv: TextView, strategy: String, etMin: EditText, etMax: EditText, kudosCount: Int) {
         val strategyName = when (strategy) {
             "smart" -> "Умная"
             "top_only" -> "Только новые"
@@ -62,11 +89,14 @@ class StrategyActivity : AppCompatActivity() {
             else -> "Умная"
         }
 
+        val min = etMin.text.toString().toIntOrNull() ?: 5000
+        val max = etMax.text.toString().toIntOrNull() ?: 12000
+
         tv.text = """
             ТЕКУЩИЕ НАСТРОЙКИ
             
             Стратегия: $strategyName
-            Интервал задержки: $minDelay - $maxDelay мс
+            Интервал задержки: $min - $max мс
             Всего отправлено лайков: $kudosCount
         """.trimIndent()
     }
