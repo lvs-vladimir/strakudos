@@ -119,9 +119,20 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        webView.onResume()
+        webView.resumeTimers()
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
         val strategy = sharedPref.getString("strategy", "smart") ?: "smart"
         updateStrategyText(strategy)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Если бот работает, НЕ останавливаем WebView — он должен работать в фоне
+        if (!isBotRunning) {
+            webView.onPause()
+            webView.pauseTimers()
+        }
     }
 
     private fun updateStrategyText(strategy: String) {
@@ -153,6 +164,9 @@ class MainActivity : AppCompatActivity() {
             touchOverlay.visibility = android.view.View.VISIBLE
             tvStatus.text = "РАБОТАЕТ"
             tvStatus.setTextColor(android.graphics.Color.parseColor("#00F0FF"))
+            
+            // Запускаем Foreground Service для работы в фоне
+            startService(Intent(this, KudosService::class.java))
         }
     }
 
@@ -165,6 +179,9 @@ class MainActivity : AppCompatActivity() {
         touchOverlay.visibility = android.view.View.GONE
         tvStatus.text = "ОСТАНОВЛЕН"
         tvStatus.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
+        
+        // Останавливаем сервис
+        stopService(Intent(this, KudosService::class.java))
     }
 
     private fun restartBot() {
