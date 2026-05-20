@@ -142,6 +142,25 @@
                     android:textSize="11sp"
                     android:layout_marginStart="40dp"
                     android:layout_marginBottom="16dp" />
+
+                <RadioButton
+                    android:id="@+id/radioClubs"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="КЛУБЫ (РОТАЦИЯ)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:buttonTint="#00F0FF"
+                    android:padding="12dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Автоматически переключается между вашей лентой и лентами клубов, в которые вы входите. Лайкает везде."
+                    android:textColor="#88FFFFFF"
+                    android:textSize="11sp"
+                    android:layout_marginStart="40dp"
+                    android:layout_marginBottom="16dp" />
             </RadioGroup>
 
             <View

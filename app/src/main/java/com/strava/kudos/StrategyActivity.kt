@@ -34,6 +34,7 @@ class StrategyActivity : AppCompatActivity() {
             "top_only" -> radioGroup.check(R.id.radioTopOnly)
             "aggressive" -> radioGroup.check(R.id.radioAggressive)
             "human" -> radioGroup.check(R.id.radioHuman)
+            "clubs" -> radioGroup.check(R.id.radioClubs)
         }
 
         radioGroup.setOnCheckedChangeListener { _, checkedId ->
@@ -42,6 +43,7 @@ class StrategyActivity : AppCompatActivity() {
                 R.id.radioTopOnly -> "top_only"
                 R.id.radioAggressive -> "aggressive"
                 R.id.radioHuman -> "human"
+                R.id.radioClubs -> "clubs"
                 else -> "smart"
             }
             with(sharedPref.edit()) {
@@ -86,6 +88,7 @@ class StrategyActivity : AppCompatActivity() {
             "top_only" -> "Только новые"
             "aggressive" -> "Агрессивная"
             "human" -> "Человечная"
+            "clubs" -> "Клубы (ротация)"
             else -> "Умная"
         }
 

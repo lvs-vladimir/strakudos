@@ -5,9 +5,23 @@
     }
     window.kudosBotRunning = true;
     window.kudosBotShouldStop = false;
-    window.likedActivities = new Set();
+    
+    // Восстанавливаем likedActivities из localStorage (чтобы не лайкать повторно при навигации)
+    try {
+        const saved = localStorage.getItem('strakudos_liked');
+        window.likedActivities = saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch(e) {
+        window.likedActivities = new Set();
+    }
 
     const STRATEGY = window.kudosStrategy || 'smart';
+    
+    // Функция для сохранения likedActivities
+    function saveLikedActivities() {
+        try {
+            localStorage.setItem('strakudos_liked', JSON.stringify([...window.likedActivities]));
+        } catch(e) {}
+    }
 
     function log(msg) {
         console.log("[KudosBot] " + msg);
@@ -17,6 +31,11 @@
     function updateStats(name) {
         if (window.AndroidApp) window.AndroidApp.onKudosGiven(name);
     }
+    
+    // Сохраняем likedActivities периодически
+    setInterval(() => {
+        saveLikedActivities();
+    }, 30000); // Каждые 30 секунд
 
     function sleep(ms) {
         return new Promise(r => setTimeout(r, ms));
@@ -383,6 +402,150 @@
         }
     }
 
+    // ===== КЛУБЫ (РОТАЦИЯ) =====
+    
+    async function getClubIds() {
+        log("Получаю список клубов...");
+        const clubIds = [];
+        
+        try {
+            // Пробуем найти клубы в меню/навигации на текущей странице
+            const navLinks = document.querySelectorAll('a[href*="/clubs/"]');
+            navLinks.forEach(link => {
+                const match = link.href.match(/\/clubs\/(\d+)/);
+                if (match && !clubIds.includes(match[1])) {
+                    clubIds.push(match[1]);
+                }
+            });
+            
+            if (clubIds.length > 0) {
+                log(`Найдено ${clubIds.length} клубов в навигации`);
+                return clubIds;
+            }
+            
+            // Если не нашли, переходим на страницу клубов
+            log("Переход на страницу клубов...");
+            window.location.href = "https://www.strava.com/clubs";
+            
+            // Ждем загрузки - это прервет выполнение бота
+            // После перезагрузки страницы бот перезапустится
+            await sleep(5000);
+            
+            // Собираем клубы со страницы
+            const clubLinks = document.querySelectorAll('a[href^="/clubs/"], a[href*="strava.com/clubs/"]');
+            clubLinks.forEach(link => {
+                const match = link.href.match(/\/clubs\/(\d+)/);
+                if (match && !clubIds.includes(match[1])) {
+                    clubIds.push(match[1]);
+                }
+            });
+            
+            log(`Найдено ${clubIds.length} клубов`);
+        } catch(e) {
+            log("Ошибка получения клубов: " + e.message);
+        }
+        
+        return clubIds;
+    }
+    
+    async function likeFeed(maxCycles) {
+        let cycle = 0;
+        const min = () => window.kudosMinDelay || 3000;
+        
+        while (cycle < maxCycles && !window.kudosBotShouldStop) {
+            cycle++;
+            let clicked = await processVisibleButtons();
+            
+            if (clicked === 0) {
+                // Скроллим вниз и ищем
+                let scrollAttempts = 0;
+                while (clicked === 0 && scrollAttempts < 10 && !window.kudosBotShouldStop) {
+                    window.scrollBy({ top: 500, behavior: 'auto' });
+                    await sleep(300);
+                    clicked = await processVisibleButtons();
+                    scrollAttempts++;
+                }
+                
+                // Если ничего не нашли после 10 скроллов - лента закончилась
+                if (clicked === 0) {
+                    log("Лента пуста или все лайкнуто");
+                    break;
+                }
+            }
+            
+            await sleep(Math.max(200, Math.floor(min() / 3)));
+        }
+    }
+    
+    async function runClubsStrategy() {
+        log("Старт стратегии КЛУБЫ (ротация)...");
+        
+        // Сначала получаем список клубов
+        // При первом запуске бота на странице dashboard/clubs
+        // или clubs - собираем ID и сохраняем
+        
+        let clubIds = [];
+        
+        // Пробуем восстановить список клубов из localStorage
+        try {
+            const saved = localStorage.getItem('strakudos_clubs');
+            if (saved) {
+                clubIds = JSON.parse(saved);
+                log(`Восстановлено ${clubIds.length} клубов из памяти`);
+            }
+        } catch(e) {}
+        
+        // Если список пуст, пробуем собрать с текущей страницы
+        if (clubIds.length === 0) {
+            // Пробуем найти клубы в боковом меню или навигации
+            const links = document.querySelectorAll('a[href*="/clubs/"]');
+            links.forEach(link => {
+                const match = link.href.match(/\/clubs\/(\d+)/);
+                if (match && !clubIds.includes(match[1])) {
+                    clubIds.push(match[1]);
+                }
+            });
+            
+            if (clubIds.length > 0) {
+                log(`Найдено ${clubIds.length} клубов`);
+                try {
+                    localStorage.setItem('strakudos_clubs', JSON.stringify(clubIds));
+                } catch(e) {}
+            }
+        }
+        
+        // Составляем список фидов для ротации
+        const feeds = [];
+        feeds.push({ name: 'Основная лента', url: 'https://www.strava.com/dashboard' });
+        
+        clubIds.forEach(id => {
+            feeds.push({ name: `Клуб ${id}`, url: `https://www.strava.com/clubs/${id}/dashboard` });
+        });
+        
+        log(`Ротация между ${feeds.length} лентами`);
+        
+        let feedIndex = 0;
+        
+        while (!window.kudosBotShouldStop) {
+            const feed = feeds[feedIndex];
+            log(`=== ${feed.name} ===`);
+            
+            // Переходим на ленту
+            window.location.href = feed.url;
+            
+            // Ждем загрузки - страница перезагрузится и бот перезапустится
+            // Это нормальное поведение, MainActivity перезапустит бот
+            await sleep(4000);
+            
+            // Лайкаем в текущей ленте (3 цикла, потом переключаемся)
+            await likeFeed(3);
+            
+            feedIndex = (feedIndex + 1) % feeds.length;
+            log(`Переключаюсь на следующую ленту...`);
+            await sleep(2000);
+        }
+    }
+
     // ===== MAIN LOOP =====
 
     async function startLoop() {
@@ -395,6 +558,9 @@
                 break;
             case 'human':
                 await runHumanStrategy();
+                break;
+            case 'clubs':
+                await runClubsStrategy();
                 break;
             case 'smart':
             default:

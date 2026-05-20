@@ -250,6 +250,7 @@ class MainActivity : AppCompatActivity() {
             "top_only" -> "ТОЛЬКО НОВЫЕ"
             "aggressive" -> "АГРЕССИВНАЯ"
             "human" -> "ЧЕЛОВЕЧНАЯ"
+            "clubs" -> "КЛУБЫ"
             else -> "УМНАЯ"
         }
         tvStrategy.text = strategyName
