@@ -48,8 +48,18 @@ class MainActivity : AppCompatActivity() {
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
         val savedStrategy = sharedPref.getString("strategy", "smart") ?: "smart"
         kudosCount = sharedPref.getInt("kudos_count", 0)
+        isBotRunning = sharedPref.getBoolean("is_bot_running", false)
         tvStats.text = kudosCount.toString()
         updateStrategyText(savedStrategy)
+
+        // Если бот был запущен до уничтожения Activity - восстанавливаем UI
+        if (isBotRunning) {
+            btnToggle.text = "СТОП"
+            btnToggle.setBackgroundResource(R.drawable.btn_secondary_bg)
+            btnToggle.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
+            tvStatus.text = "РАБОТАЕТ"
+            tvStatus.setTextColor(android.graphics.Color.parseColor("#00F0FF"))
+        }
 
         val settings = webView.settings
         settings.javaScriptEnabled = true
@@ -69,19 +79,20 @@ class MainActivity : AppCompatActivity() {
                 super.onPageFinished(view, url)
                 
                 if (url != null && url.contains("strava.com/dashboard")) {
-                    tvStatus.text = "ВХОД ВЫПОЛНЕН (ГОТОВ)"
+                    tvStatus.text = if (isBotRunning) "РАБОТАЕТ" else "ВХОД ВЫПОЛНЕН (ГОТОВ)"
                     tvStatus.setTextColor(android.graphics.Color.parseColor("#00F0FF"))
-                    if (!isBotRunning) {
-                        btnToggle.isEnabled = true
-                        btnToggle.alpha = 1.0f
-                    } else {
+                    btnToggle.isEnabled = true
+                    btnToggle.alpha = 1.0f
+                    if (isBotRunning) {
                         restartBot()
                     }
                 } else {
                     tvStatus.text = "ОЖИДАНИЕ ВХОДА"
                     tvStatus.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
-                    btnToggle.isEnabled = false
-                    btnToggle.alpha = 0.4f
+                    if (!isBotRunning) {
+                        btnToggle.isEnabled = false
+                        btnToggle.alpha = 0.4f
+                    }
                 }
             }
         }
@@ -135,6 +146,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onBackPressed() {
+        // Сворачиваем приложение вместо уничтожения Activity
+        moveTaskToBack(true)
+    }
+
     private fun updateStrategyText(strategy: String) {
         val strategyName = when (strategy) {
             "smart" -> "УМНАЯ"
@@ -158,6 +174,10 @@ class MainActivity : AppCompatActivity() {
         if (botScript.isNotEmpty()) {
             webView.evaluateJavascript(botScript, null)
             isBotRunning = true
+            with(sharedPref.edit()) {
+                putBoolean("is_bot_running", true)
+                apply()
+            }
             btnToggle.text = "СТОП"
             btnToggle.setBackgroundResource(R.drawable.btn_secondary_bg)
             btnToggle.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
@@ -173,6 +193,11 @@ class MainActivity : AppCompatActivity() {
     private fun stopBot() {
         webView.evaluateJavascript("window.kudosBotShouldStop = true;", null)
         isBotRunning = false
+        val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
+        with(sharedPref.edit()) {
+            putBoolean("is_bot_running", false)
+            apply()
+        }
         btnToggle.text = "СТАРТ"
         btnToggle.setBackgroundResource(R.drawable.btn_primary_bg)
         btnToggle.setTextColor(android.graphics.Color.parseColor("#000000"))
