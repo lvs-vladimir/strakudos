@@ -524,7 +524,12 @@
     }
     
     function hasActivityFeed() {
-        const activities = document.querySelectorAll('[data-testid="web-feed-entry"], [data-testid="feed-entry"], .activity, .entity-details, .activity-card, [class*="activity" i]');
+        // Сначала проверяем URL — должно быть /recent_activity
+        if (!window.location.pathname.includes('/recent_activity')) {
+            return false;
+        }
+        // Потом проверяем наличие элементов ленты
+        const activities = document.querySelectorAll('[data-testid="web-feed-entry"], [data-testid="feed-entry"]');
         return activities.length > 0;
     }
     
@@ -1228,33 +1233,28 @@
                 localStorage.setItem('sk_visited', JSON.stringify(visited));
             }
             
-            // Проверяем, есть ли уже лента тренировок
-            if (hasActivityFeed()) {
-                log('Лента тренировок уже загружена');
-            } else {
+            // Проверяем URL — если не /recent_activity, нужно кликнуть вкладку
+            if (!window.location.pathname.includes('/recent_activity')) {
+                log('Не на вкладке тренировок (URL: ' + window.location.pathname + '), ищу вкладку...');
+                
                 // Ищем и кликаем вкладку активности
                 const tab = findActivityTab();
-                if (tab && !isTabActive(tab)) {
-                    log('Кликаю на вкладку активности');
+                if (tab) {
+                    log('Кликаю на вкладку: [' + tab.textContent.trim() + ']');
                     simulateClick(tab);
                     await sleep(5000);
-                    // После клика страница обновится, бот будет рестартован MainActivity
-                    // При рестарте hasActivityFeed() вернет true и бот перейдет к лайканию
+                    // После клика страница загрузит /recent_activity, бот рестартует
                     return;
                 }
                 
-                if (!tab) {
-                    log('Вкладка активности не найдена, прокручиваю...');
-                    window.scrollBy({ top: 300, behavior: 'auto' });
-                    await sleep(2000);
-                    const tabAgain = findActivityTab();
-                    if (tabAgain && !isTabActive(tabAgain)) {
-                        simulateClick(tabAgain);
-                        await sleep(5000);
-                        return;
-                    }
-                }
+                // Fallback: прямой переход на /recent_activity
+                log('Вкладка не найдена, прямой переход на /recent_activity');
+                window.location.href = 'https://www.strava.com' + clubUrl + '/recent_activity';
+                await sleep(5000);
+                return;
             }
+            
+            log('На вкладке тренировок (' + window.location.pathname + ')');
             
             // Проверяем, есть ли тренировки в ленте
             const activities = document.querySelectorAll('[data-testid="web-feed-entry"], [data-testid="feed-entry"], .activity, .entity-details, .activity-card, [class*="activity" i]');
