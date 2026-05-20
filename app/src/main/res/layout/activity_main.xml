@@ -239,47 +239,7 @@
                     android:letterSpacing="0.1"
                     android:padding="0dp" />
 
-                <Button
-                    android:id="@+id/btnClear"
-                    android:layout_width="100dp"
-                    android:layout_height="38dp"
-                    android:background="@drawable/btn_outline_bg"
-                    android:text="СБРОС"
-                    android:textColor="#FFFFFF"
-                    android:textStyle="bold"
-                    android:textSize="11sp"
-                    android:letterSpacing="0.1"
-                    android:padding="0dp" />
             </LinearLayout>
-
-            <!-- Terminal Logs -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="СИСТЕМНЫЕ ЛОГИ"
-                android:textColor="#88FFFFFF"
-                android:textSize="9sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.15"
-                android:layout_marginBottom="4dp" />
-
-            <ScrollView
-                android:id="@+id/scrollLog"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="#0A0A0A"
-                android:padding="10dp">
-
-                <TextView
-                    android:id="@+id/tvLogs"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="monospace"
-                    android:textColor="#00F0FF"
-                    android:textSize="10sp"
-                    android:text="[СИСТЕМА] Инициализация Vision UI...\n[СИСТЕМА] Пожалуйста, войдите в свой аккаунт Strava.\n"
-                    android:lineSpacingMultiplier="1.2" />
-            </ScrollView>
         </LinearLayout>
         </LinearLayout>
     </LinearLayout>

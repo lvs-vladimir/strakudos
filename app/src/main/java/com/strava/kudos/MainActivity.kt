@@ -8,7 +8,6 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.CookieManager
 import android.widget.Button
-import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.drawerlayout.widget.DrawerLayout
@@ -21,11 +20,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var tvStatus: TextView
     private lateinit var tvStats: TextView
-    private lateinit var tvLogs: TextView
-    private lateinit var scrollLog: ScrollView
     private lateinit var btnStart: Button
     private lateinit var btnStop: Button
-    private lateinit var btnClear: Button
     private lateinit var etMinDelay: android.widget.EditText
     private lateinit var etMaxDelay: android.widget.EditText
     private lateinit var touchOverlay: android.view.View
@@ -44,11 +40,8 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webView)
         tvStatus = findViewById(R.id.tvStatus)
         tvStats = findViewById(R.id.tvStats)
-        tvLogs = findViewById(R.id.tvLogs)
-        scrollLog = findViewById(R.id.scrollLog)
         btnStart = findViewById(R.id.btnStart)
         btnStop = findViewById(R.id.btnStop)
-        btnClear = findViewById(R.id.btnClear)
         etMinDelay = findViewById(R.id.etMinDelay)
         etMaxDelay = findViewById(R.id.etMaxDelay)
         touchOverlay = findViewById(R.id.touchOverlay)
@@ -80,7 +73,6 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-                appendLog("Страница загружена: $url")
                 
                 if (url != null && url.contains("strava.com/dashboard")) {
                     tvStatus.text = "ВХОД ВЫПОЛНЕН (ГОТОВ)"
@@ -102,10 +94,6 @@ class MainActivity : AppCompatActivity() {
 
         btnStop.setOnClickListener {
             stopBot()
-        }
-
-        btnClear.setOnClickListener {
-            tvLogs.text = ""
         }
 
         btnMenu.setOnClickListener {
@@ -135,10 +123,8 @@ class MainActivity : AppCompatActivity() {
             apply()
         }
 
-        appendLog("Установлен интервал случайной задержки: $minMs - $maxMs мс.")
         webView.evaluateJavascript("window.kudosMinDelay = $minMs; window.kudosMaxDelay = $maxMs;", null)
 
-        appendLog("Запуск скрипта автоматизации...")
         val botScript = readAssetFile("bot.js")
         if (botScript.isNotEmpty()) {
             webView.evaluateJavascript(botScript, null)
@@ -148,13 +134,10 @@ class MainActivity : AppCompatActivity() {
             touchOverlay.visibility = android.view.View.VISIBLE
             tvStatus.text = "РАБОТАЕТ"
             tvStatus.setTextColor(android.graphics.Color.parseColor("#00F0FF"))
-        } else {
-            appendLog("Ошибка: Не удалось загрузить bot.js!")
         }
     }
 
     private fun stopBot() {
-        appendLog("Остановка скрипта автоматизации...")
         webView.evaluateJavascript("window.kudosBotShouldStop = true;", null)
         isBotRunning = false
         btnStart.isEnabled = true
@@ -182,30 +165,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun appendLog(message: String) {
-        runOnUiThread {
-            tvLogs.append("[$currentTimestamp] $message\n")
-            val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
-            with(sharedPref.edit()) {
-                putString("logs", tvLogs.text.toString())
-                apply()
-            }
-            scrollLog.post {
-                scrollLog.fullScroll(ScrollView.FOCUS_DOWN)
-            }
-        }
-    }
-
-    private val currentTimestamp: String
-        get() {
-            val sdf = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
-            return sdf.format(java.util.Date())
-        }
-
     inner class BotJavascriptInterface {
         @JavascriptInterface
         fun log(message: String) {
-            appendLog(message)
         }
 
         @JavascriptInterface
@@ -218,7 +180,6 @@ class MainActivity : AppCompatActivity() {
                     putInt("kudos_count", kudosCount)
                     apply()
                 }
-                appendLog("🔥 Успешно отправлен лайк спортсмену $athleteName!")
             }
         }
     }
