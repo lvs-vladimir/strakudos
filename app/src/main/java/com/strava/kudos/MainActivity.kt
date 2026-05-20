@@ -9,7 +9,10 @@ import android.webkit.CookieManager
 import android.widget.Button
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.drawerlayout.widget.DrawerLayout
+import com.google.android.material.navigation.NavigationView
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
@@ -26,6 +29,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etMinDelay: android.widget.EditText
     private lateinit var etMaxDelay: android.widget.EditText
     private lateinit var touchOverlay: android.view.View
+    private lateinit var drawerLayout: DrawerLayout
+    private lateinit var navigationView: NavigationView
+    private lateinit var btnMenu: android.widget.ImageButton
 
     private var kudosCount = 0
     private var isBotRunning = false
@@ -46,6 +52,9 @@ class MainActivity : AppCompatActivity() {
         etMinDelay = findViewById(R.id.etMinDelay)
         etMaxDelay = findViewById(R.id.etMaxDelay)
         touchOverlay = findViewById(R.id.touchOverlay)
+        drawerLayout = findViewById(R.id.drawerLayout)
+        navigationView = findViewById(R.id.navigationView)
+        btnMenu = findViewById(R.id.btnMenu)
 
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
         val savedMin = sharedPref.getInt("min_delay", 5000)
@@ -98,6 +107,99 @@ class MainActivity : AppCompatActivity() {
         btnClear.setOnClickListener {
             tvLogs.text = ""
         }
+
+        btnMenu.setOnClickListener {
+            drawerLayout.openDrawer(androidx.core.view.GravityCompat.START)
+        }
+
+        navigationView.setNavigationItemSelectedListener { menuItem ->
+            drawerLayout.closeDrawers()
+            when (menuItem.itemId) {
+                R.id.nav_strategy -> showStrategyDialog()
+                R.id.nav_settings -> showSettingsDialog()
+                R.id.nav_about -> showAboutDialog()
+            }
+            true
+        }
+    }
+
+    private fun showStrategyDialog() {
+        AlertDialog.Builder(this, androidx.appcompat.R.style.ThemeOverlay_AppCompat_Dialog_Alert)
+            .setTitle("Стратегия работы бота")
+            .setMessage(
+                "Текущая стратегия:\n\n" +
+                "1. Бот сканирует видимую часть ленты и ставит лайки\n" +
+                "2. Если нет тренировок - скроллит вниз небольшими шагами\n" +
+                "3. При достижении предела - возвращается в начало ленты\n" +
+                "4. Обновляет страницу для получения новых тренировок\n\n" +
+                "Интервал задержки:\n" +
+                "Мин: ${etMinDelay.text} мс\n" +
+                "Макс: ${etMaxDelay.text} мс\n\n" +
+                "Всего отправлено лайков: $kudosCount"
+            )
+            .setPositiveButton("OK", null)
+            .show()
+            .apply {
+                window?.setBackgroundDrawableResource(android.R.color.black)
+            }
+    }
+
+    private fun showSettingsDialog() {
+        val builder = AlertDialog.Builder(this, androidx.appcompat.R.style.ThemeOverlay_AppCompat_Dialog_Alert)
+        builder.setTitle("Настройки")
+        
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(40, 20, 40, 20)
+        }
+        
+        val resetCountBtn = Button(this).apply {
+            text = "Сбросить счетчик лайков"
+            setBackgroundColor(android.graphics.Color.parseColor("#00F0FF"))
+            setTextColor(android.graphics.Color.BLACK)
+        }
+        
+        resetCountBtn.setOnClickListener {
+            kudosCount = 0
+            val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
+            with(sharedPref.edit()) {
+                putInt("kudos_count", 0)
+                apply()
+            }
+            tvStats.text = "ЛАЙКОВ ОТПРАВЛЕНО: 0"
+            appendLog("Счетчик лайков сброшен")
+        }
+        
+        layout.addView(resetCountBtn)
+        
+        builder.setView(layout)
+        builder.setPositiveButton("OK", null)
+        builder.show()
+            .apply {
+                window?.setBackgroundDrawableResource(android.R.color.black)
+            }
+    }
+
+    private fun showAboutDialog() {
+        AlertDialog.Builder(this, androidx.appcompat.R.style.ThemeOverlay_AppCompat_Dialog_Alert)
+            .setTitle("О приложении")
+            .setMessage(
+                "Strakudos v1.0.0\n\n" +
+                "Автоматизация лайков для Strava\n\n" +
+                "Особенности:\n" +
+                "- Автоматические лайки друзьям\n" +
+                "- Настраиваемый интервал задержки\n" +
+                "- Блокировка экрана во время работы\n" +
+                "- Сохранение настроек и статистики\n" +
+                "- Умная стратегия прокрутки\n\n" +
+                "Дизайн: Vision Framework\n" +
+                "Язык: Русский"
+            )
+            .setPositiveButton("OK", null)
+            .show()
+            .apply {
+                window?.setBackgroundDrawableResource(android.R.color.black)
+            }
     }
 
     private fun startBot() {
