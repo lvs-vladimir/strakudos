@@ -75,9 +75,15 @@ class MainActivity : AppCompatActivity() {
                 if (url != null && url.contains("strava.com/dashboard")) {
                     tvStatus.text = "ВХОД ВЫПОЛНЕН (ГОТОВ)"
                     tvStatus.setTextColor(android.graphics.Color.parseColor("#00F0FF"))
-                } else if (url != null && url.contains("login")) {
+                    if (!isBotRunning) {
+                        btnToggle.isEnabled = true
+                        btnToggle.alpha = 1.0f
+                    }
+                } else {
                     tvStatus.text = "ОЖИДАНИЕ ВХОДА"
                     tvStatus.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
+                    btnToggle.isEnabled = false
+                    btnToggle.alpha = 0.4f
                 }
             }
         }
