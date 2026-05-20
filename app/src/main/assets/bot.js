@@ -1,6 +1,6 @@
-// Strakudos Bot v1.4.4 - Skip 10+ consecutive already-liked activities, switch club
+// Strakudos Bot v1.4.5 - Fix club switching after 10 already-liked, proper cycle exit
 (function() {
-    console.log("[KudosBot] Loading bot v1.4.4...");
+    console.log("[KudosBot] Loading bot v1.4.5...");
     if (window.kudosBotRunning) {
         console.log("Бот уже запущен.");
         return;
@@ -612,7 +612,7 @@
                     consecutiveAlreadyLiked++;
                     if (consecutiveAlreadyLiked >= MAX_CONSECUTIVE_LIKED) {
                         log('  🔁 ' + consecutiveAlreadyLiked + ' подряд тренировок уже лайкнуты. Ухожу в следующий клуб.');
-                        return totalLiked;
+                        return -1; // Сигнал: пора уходить в следующий клуб
                     }
                     continue;
                 }
@@ -1536,9 +1536,17 @@
                     return;
                 }
                 
-            // Лайкаем и прокручиваем
-            const liked = await scrollAndLikeClubFeed(clubUrl);
-            totalClubLikes += liked;
+                // Лайкаем и прокручиваем
+                const liked = await scrollAndLikeClubFeed(clubUrl);
+                
+                // Сигнал: 10+ подряд уже лайкнуты — уходим в следующий клуб
+                if (liked < 0) {
+                    log('Все тренировки в клубе уже лайкнуты, перехожу к следующему');
+                    goToNextClub();
+                    return;
+                }
+                
+                totalClubLikes += liked;
                 log('Всего лайкнуто в клубе: ' + totalClubLikes);
                 
                 if (liked === 0) {
