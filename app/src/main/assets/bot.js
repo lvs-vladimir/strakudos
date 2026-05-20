@@ -304,9 +304,12 @@
 
     async function runAggressiveStrategy() {
         log("Старт АГРЕССИВНОЙ стратегии...");
+        let noProgressCount = 0;
+        let lastScrollY = 0;
         
         while (!window.kudosBotShouldStop) {
             const buttons = findKudosButtons();
+            let clickedInCycle = 0;
             
             for (const {btn, actId} of buttons) {
                 if (window.kudosBotShouldStop) break;
@@ -316,13 +319,32 @@
                     if (actId) window.likedActivities.add(actId);
                     log(`✅ Лайк: ${athlete}`);
                     updateStats(athlete);
+                    clickedInCycle++;
                 }
                 await sleep(200);
             }
             
-            if (!window.kudosBotShouldStop) {
-                window.scrollBy({ top: 600, behavior: 'auto' });
-                await sleep(500);
+            if (window.kudosBotShouldStop) break;
+            
+            // Скроллим вниз и проверяем, изменилась ли позиция
+            lastScrollY = window.scrollY;
+            window.scrollBy({ top: 600, behavior: 'auto' });
+            await sleep(500);
+            
+            // Если скролл не изменился — достигнут конец страницы
+            if (window.scrollY === lastScrollY) {
+                noProgressCount++;
+                log(`⬇️ Конец ленты (${noProgressCount}/3)`);
+                
+                if (noProgressCount >= 3) {
+                    log("🔄 Достигнут конец ленты. Возвращаюсь в начало...");
+                    await scrollToTop();
+                    noProgressCount = 0;
+                    // После возврата ждем загрузки новых постов
+                    await sleep(3000);
+                }
+            } else {
+                noProgressCount = 0;
             }
         }
     }
