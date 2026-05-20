@@ -121,7 +121,8 @@ class MainActivity : AppCompatActivity() {
             apply()
         }
 
-        webView.evaluateJavascript("window.kudosMinDelay = $minMs; window.kudosMaxDelay = $maxMs;", null)
+        val strategy = sharedPref.getString("strategy", "smart") ?: "smart"
+        webView.evaluateJavascript("window.kudosMinDelay = $minMs; window.kudosMaxDelay = $maxMs; window.kudosStrategy = '$strategy';", null)
 
         val botScript = readAssetFile("bot.js")
         if (botScript.isNotEmpty()) {

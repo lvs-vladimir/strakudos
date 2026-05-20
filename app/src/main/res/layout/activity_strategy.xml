@@ -54,14 +54,104 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Текущая стратегия работы"
+                android:text="ВЫБЕРИТЕ СТРАТЕГИЮ"
                 android:textColor="#00F0FF"
                 android:textStyle="bold"
                 android:textSize="16sp"
                 android:layout_marginBottom="16dp" />
 
+            <RadioGroup
+                android:id="@+id/radioStrategies"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <RadioButton
+                    android:id="@+id/radioSmart"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="УМНАЯ (рекомендуется)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:buttonTint="#00F0FF"
+                    android:padding="12dp"
+                    android:checked="true" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Сканирует ленту, скроллит вниз, возвращается вверх для новых тренировок, обновляет страницу"
+                    android:textColor="#88FFFFFF"
+                    android:textSize="11sp"
+                    android:layout_marginStart="40dp"
+                    android:layout_marginBottom="16dp" />
+
+                <RadioButton
+                    android:id="@+id/radioTopOnly"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="ТОЛЬКО НОВЫЕ"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:buttonTint="#00F0FF"
+                    android:padding="12dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Лайкает только верхние тренировки без глубокого скролла. Быстро и безопасно."
+                    android:textColor="#88FFFFFF"
+                    android:textSize="11sp"
+                    android:layout_marginStart="40dp"
+                    android:layout_marginBottom="16dp" />
+
+                <RadioButton
+                    android:id="@+id/radioAggressive"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="АГРЕССИВНАЯ"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:buttonTint="#00F0FF"
+                    android:padding="12dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Максимальная скорость. Минимальные задержки. Риск блокировки!"
+                    android:textColor="#88FFFFFF"
+                    android:textSize="11sp"
+                    android:layout_marginStart="40dp"
+                    android:layout_marginBottom="16dp" />
+
+                <RadioButton
+                    android:id="@+id/radioHuman"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="ЧЕЛОВЕЧНАЯ"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:buttonTint="#00F0FF"
+                    android:padding="12dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Большие случайные паузы, медленный скролл. Максимально естественно."
+                    android:textColor="#88FFFFFF"
+                    android:textSize="11sp"
+                    android:layout_marginStart="40dp"
+                    android:layout_marginBottom="16dp" />
+            </RadioGroup>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#33FFFFFF"
+                android:layout_marginVertical="16dp" />
+
             <TextView
-                android:id="@+id/tvStrategy"
+                android:id="@+id/tvCurrentSettings"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textColor="#FFFFFF"

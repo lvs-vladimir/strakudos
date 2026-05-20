@@ -7,6 +7,8 @@
     window.kudosBotShouldStop = false;
     window.likedActivities = new Set();
 
+    const STRATEGY = window.kudosStrategy || 'smart';
+
     function log(msg) {
         console.log("[KudosBot] " + msg);
         if (window.AndroidApp) window.AndroidApp.log(msg);
@@ -144,7 +146,7 @@
     }
 
     async function scrollToTop() {
-        log("Возвращаюсь в начало ленты для проверки новых тренировок...");
+        log("Возвращаюсь в начало ленты...");
         let scrolls = 0;
         while (window.scrollY > 100 && scrolls < 30) {
             if (window.kudosBotShouldStop) return;
@@ -157,23 +159,21 @@
     }
 
     async function refreshFeed() {
-        log("Обновляю ленту активностей...");
+        log("Обновляю ленту...");
         window.scrollTo({ top: 0, behavior: 'auto' });
         await sleep(300);
         
-        // Пробуем найти и нажать кнопку обновления, если есть
         const refreshBtn = document.querySelector('button[data-testid*="refresh" i], [class*="refresh" i] button');
         if (refreshBtn) {
             refreshBtn.click();
-            log("Нажата кнопка обновления ленты");
+            log("Нажата кнопка обновления");
             await sleep(2000);
             return;
         }
         
-        // Альтернативно - перезагружаем страницу dashboard
         if (window.location.href.includes('/dashboard')) {
             window.location.reload();
-            log("Страница обновлена для получения новых тренировок");
+            log("Страница обновлена");
             await sleep(3000);
         }
     }
@@ -221,8 +221,10 @@
         return clicked;
     }
 
-    async function startLoop() {
-        log("Старт умной стратегии лайкания...");
+    // ===== STRATEGIES =====
+
+    async function runSmartStrategy() {
+        log("Старт УМНОЙ стратегии...");
         let cycle = 0;
         const min = () => window.kudosMinDelay || 5000;
         const max = () => window.kudosMaxDelay || 12000;
@@ -231,10 +233,8 @@
             cycle++;
             log(`=== Цикл ${cycle} ===`);
             
-            // ШАГ 1: Лайкаем все видимые в текущей позиции
             let clicked = await processVisibleButtons();
             
-            // ШАГ 2: Если ничего не нашли - скроллим вниз небольшими шагами
             if (clicked === 0) {
                 let scrollAttempts = 0;
                 let totalScrolled = 0;
@@ -249,32 +249,133 @@
                     scrollAttempts++;
                 }
                 
-                // ШАГ 3: Если проскроллили слишком много или не нашли - возвращаемся вверх
                 if (totalScrolled > 3000 || clicked === 0) {
-                    log("Достигнут предел ленты или нет новых тренировок");
-                    
-                    // Возвращаемся в начало
+                    log("Достигнут предел ленты");
                     await scrollToTop();
-                    
-                    // Проверяем новые тренировки сверху
                     clicked = await processVisibleButtons();
                     
-                    // Если все еще нет - обновляем страницу
                     if (clicked === 0 && cycle % 3 === 0) {
                         await refreshFeed();
                     } else {
-                        // Ждем перед следующей проверкой
                         const waitTime = Math.max(3000, min() * 2);
-                        log(`Жду ${(waitTime/1000).toFixed(1)} сек перед следующей проверкой...`);
+                        log(`Жду ${(waitTime/1000).toFixed(1)} сек...`);
                         await sleep(waitTime);
                     }
                 }
             }
             
-            // Короткая пауза между циклами
             if (!window.kudosBotShouldStop) {
                 await sleep(Math.max(500, Math.floor(min() / 2)));
             }
+        }
+    }
+
+    async function runTopOnlyStrategy() {
+        log("Старт стратегии ТОЛЬКО НОВЫЕ...");
+        let refreshCount = 0;
+        const min = () => window.kudosMinDelay || 5000;
+
+        while (!window.kudosBotShouldStop) {
+            window.scrollTo({ top: 0, behavior: 'auto' });
+            await sleep(500);
+            
+            const clicked = await processVisibleButtons();
+            
+            if (clicked === 0) {
+                refreshCount++;
+                if (refreshCount >= 3) {
+                    await refreshFeed();
+                    refreshCount = 0;
+                } else {
+                    log("Нет новых тренировок, жду...");
+                    await sleep(Math.max(5000, min() * 2));
+                }
+            } else {
+                refreshCount = 0;
+            }
+            
+            if (!window.kudosBotShouldStop) {
+                await sleep(Math.max(1000, min()));
+            }
+        }
+    }
+
+    async function runAggressiveStrategy() {
+        log("Старт АГРЕССИВНОЙ стратегии...");
+        
+        while (!window.kudosBotShouldStop) {
+            const buttons = findKudosButtons();
+            
+            for (const {btn, actId} of buttons) {
+                if (window.kudosBotShouldStop) break;
+                
+                const athlete = findAthleteName(btn);
+                if (safeClick(btn)) {
+                    if (actId) window.likedActivities.add(actId);
+                    log(`✅ Лайк: ${athlete}`);
+                    updateStats(athlete);
+                }
+                await sleep(200);
+            }
+            
+            if (!window.kudosBotShouldStop) {
+                window.scrollBy({ top: 600, behavior: 'auto' });
+                await sleep(500);
+            }
+        }
+    }
+
+    async function runHumanStrategy() {
+        log("Старт ЧЕЛОВЕЧНОЙ стратегии...");
+        let cycle = 0;
+        const min = () => window.kudosMinDelay || 8000;
+        const max = () => window.kudosMaxDelay || 25000;
+
+        while (!window.kudosBotShouldStop) {
+            cycle++;
+            
+            let clicked = await processVisibleButtons();
+            
+            if (clicked === 0) {
+                // Медленный скролл как человек
+                const scrollAmount = Math.floor(Math.random() * 300) + 200;
+                window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+                
+                const readTime = Math.floor(Math.random() * (max() - min())) + min();
+                log(`Читаю ленту ${(readTime/1000).toFixed(1)} сек...`);
+                await sleep(readTime);
+                
+                clicked = await processVisibleButtons();
+                
+                if (clicked === 0 && cycle % 5 === 0) {
+                    log("Делаю большую паузу...");
+                    await sleep(Math.max(10000, min() * 3));
+                }
+            }
+            
+            if (!window.kudosBotShouldStop) {
+                await sleep(Math.max(2000, Math.floor(min() / 2)));
+            }
+        }
+    }
+
+    // ===== MAIN LOOP =====
+
+    async function startLoop() {
+        switch (STRATEGY) {
+            case 'top_only':
+                await runTopOnlyStrategy();
+                break;
+            case 'aggressive':
+                await runAggressiveStrategy();
+                break;
+            case 'human':
+                await runHumanStrategy();
+                break;
+            case 'smart':
+            default:
+                await runSmartStrategy();
+                break;
         }
         
         log("Автоматизация остановлена.");
