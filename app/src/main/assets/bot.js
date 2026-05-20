@@ -206,6 +206,245 @@
         return total;
     }
 
+    // ====== НАВИГАЦИЯ ПО КЛУБАМ ======
+    
+    function simulateClick(el) {
+        try {
+            const event = new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                view: window
+            });
+            el.dispatchEvent(event);
+        } catch(e) {
+            try { el.click(); } catch(e2) {}
+        }
+    }
+    
+    function findClickableParent(el) {
+        let parent = el;
+        let depth = 0;
+        while (parent && depth < 5) {
+            if (parent.tagName === 'BUTTON' || parent.tagName === 'A' ||
+                parent.getAttribute('role') === 'button' || parent.onclick ||
+                parent.getAttribute('onclick')) {
+                return parent;
+            }
+            parent = parent.parentElement;
+            depth++;
+        }
+        return null;
+    }
+    
+    function clickSandwichMenu() {
+        log('Открываю меню навигации (гамбургер)...');
+        
+        const selectors = [
+            'button[aria-label*="menu" i]',
+            'button[aria-label*="Menu" i]',
+            'button[aria-label*="меню" i]',
+            'button[aria-label*="Меню" i]',
+            'button[aria-label*="navigation" i]',
+            'button[aria-label*="Navigation" i]',
+            '[data-testid="nav-menu-toggle"]',
+            '[data-testid="menu-toggle"]',
+            '.nav-menu-toggle',
+            '.menu-toggle',
+            '[class*="menu-toggle"]',
+            '[class*="hamburger"]',
+            '[class*="nav-toggle"]',
+            'header button:first-of-type'
+        ];
+        
+        for (const sel of selectors) {
+            const el = document.querySelector(sel);
+            if (el) {
+                const clickable = findClickableParent(el) || el;
+                log('Нашел кнопку меню: ' + sel + ', кликаю...');
+                simulateClick(clickable);
+                return true;
+            }
+        }
+        
+        // Fallback: ищем по SVG с тремя линиями
+        const buttons = document.querySelectorAll('button, [role="button"]');
+        for (const btn of buttons) {
+            const svg = btn.querySelector('svg');
+            if (svg) {
+                const svgContent = svg.innerHTML || '';
+                if (svgContent.includes('M3') || svgContent.includes('M4') ||
+                    svgContent.toLowerCase().includes('menu')) {
+                    log('Нашел кнопку меню по SVG');
+                    simulateClick(btn);
+                    return true;
+                }
+            }
+        }
+        
+        log('Не удалось найти кнопку меню');
+        return false;
+    }
+    
+    function clickMenuItemByText(texts) {
+        const allElements = document.querySelectorAll('a, button, [role="menuitem"], li, span, div');
+        for (const el of allElements) {
+            const text = el.textContent.trim();
+            for (const search of texts) {
+                if (text === search || text.toLowerCase().includes(search.toLowerCase())) {
+                    log('Кликаю пункт меню: [' + text + ']');
+                    simulateClick(el);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
+    function getClubLinksFromPage() {
+        const links = document.querySelectorAll('a[href^="/clubs/"]');
+        const clubs = [];
+        const seen = new Set();
+        
+        for (const link of links) {
+            const href = link.getAttribute('href') || '';
+            // Берем только прямые ссылки на клубы: /clubs/12345
+            const match = href.match(/^\/clubs\/(\d+)$/);
+            if (match) {
+                const clubId = match[1];
+                if (!seen.has(clubId)) {
+                    seen.add(clubId);
+                    clubs.push('/clubs/' + clubId);
+                }
+            }
+        }
+        
+        return clubs;
+    }
+    
+    function findActivityTab() {
+        const tabTexts = [
+            'Recent Activity', 'Последняя тренировка', 'Recent', 'Activity',
+            'Тренировки', 'Activities', 'Лента', 'Feed', 'Club Feed', 'Последние'
+        ];
+        
+        const selectors = [
+            'a[href*="/recent_activity"]',
+            'a[href*="/activity"]',
+            '[role="tab"]',
+            '[data-testid*="tab"]',
+            '.tabs a',
+            '.tab',
+            'nav a',
+            '[class*="tab"]'
+        ];
+        
+        for (const sel of selectors) {
+            const tabs = document.querySelectorAll(sel);
+            for (const tab of tabs) {
+                const text = (tab.textContent || '').trim();
+                for (const search of tabTexts) {
+                    if (text.toLowerCase().includes(search.toLowerCase())) {
+                        return tab;
+                    }
+                }
+            }
+        }
+        
+        // Fallback: ищем по всем элементам
+        const all = document.querySelectorAll('a, button, [role="tab"], div, span');
+        for (const el of all) {
+            const text = (el.textContent || '').trim();
+            for (const search of tabTexts) {
+                if (text.toLowerCase().includes(search.toLowerCase())) {
+                    return el;
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    function isTabActive(tab) {
+        if (!tab) return false;
+        return tab.getAttribute('aria-selected') === 'true' ||
+               tab.classList.contains('active') ||
+               tab.classList.contains('selected') ||
+               tab.getAttribute('aria-current') === 'page' ||
+               tab.getAttribute('aria-current') === 'true' ||
+               tab.classList.contains('current');
+    }
+    
+    function goToNextClub() {
+        let currentIndex = parseInt(localStorage.getItem('sk_index') || '0');
+        currentIndex++;
+        localStorage.setItem('sk_index', currentIndex.toString());
+        log('Следующий клуб (индекс: ' + currentIndex + ')');
+        window.location.href = 'https://www.strava.com/clubs/search';
+    }
+    
+    async function scrollAndLikeClubFeed() {
+        let totalLiked = 0;
+        let scrollAttempts = 0;
+        let lastY = window.scrollY;
+        const maxScrolls = 20;
+        
+        while (scrollAttempts < maxScrolls && !window.kudosBotShouldStop) {
+            // Лайкаем видимые
+            const buttons = findKudosButtons();
+            let likedInCycle = 0;
+            
+            for (let i = 0; i < buttons.length; i++) {
+                const item = buttons[i];
+                const btn = item.btn;
+                const actId = item.actId;
+                if (window.kudosBotShouldStop) break;
+                if (!isInViewport(btn)) continue;
+                
+                const rect = btn.getBoundingClientRect();
+                const x = rect.left + rect.width / 2;
+                const y = rect.top + rect.height / 2;
+                const elAtPoint = document.elementFromPoint(x, y);
+                if (!elAtPoint || (!btn.contains(elAtPoint) && elAtPoint !== btn)) continue;
+                
+                const athlete = findAthleteName(btn);
+                log('Лайкаю: ' + athlete);
+                
+                const min = window.kudosMinDelay || 3000;
+                const max = window.kudosMaxDelay || 8000;
+                const delay = Math.floor(Math.random() * Math.max(0, max - min)) + min;
+                if (delay > 500) {
+                    log('Пауза ' + (delay/1000).toFixed(1) + 'с...');
+                    await sleep(delay);
+                }
+                
+                if (window.kudosBotShouldStop) break;
+                if (safeClick(btn)) {
+                    if (actId) window.likedActivities.add(actId);
+                    log('Лайк: ' + athlete);
+                    updateStats(athlete);
+                    likedInCycle++;
+                    totalLiked++;
+                    await sleep(Math.max(100, Math.floor(min / 3)));
+                }
+            }
+            
+            if (likedInCycle === 0) {
+                // Прокручиваем
+                window.scrollBy({ top: 600, behavior: 'auto' });
+                await sleep(800);
+                scrollAttempts++;
+                
+                if (window.scrollY === lastY) {
+                    log('Конец ленты в клубе');
+                    break;
+                }
+                lastY = window.scrollY;
+            }
+        }
+        
+        return totalLiked;
+    }
+    
     // ====== НАВИГАЦИЯ ПО ЛЕНТАМ ======
     
     function getPageFeeds() {
@@ -636,140 +875,190 @@
     }
 
     async function runClubsStrategy() {
-        log("🏃 Старт стратегии КЛУБЫ (через dropdown на странице)...");
+        log('=== Запускаю стратегию: РОТАЦИЯ КЛУБОВ (через меню) ===');
         
-        // Восстанавливаем индекс ленты из памяти
-        let feedIndex = 0;
-        try {
-            const savedIndex = localStorage.getItem('strakudos_feed_index');
-            if (savedIndex) feedIndex = parseInt(savedIndex, 10) || 0;
-        } catch(e) {}
+        const url = window.location.pathname;
         
-        let feeds = [];
-        let cyclesWithoutLikes = 0;
-        let totalLiked = 0;
-        
-        // ПЕРВЫЙ ПРОХОД: открываем dropdown и собираем все ленты
-        log("🔍 Первый проход: открываю dropdown и собираю список лент...");
-        
-        // Находим и кликаем на dropdown selector
-        const selectorOpened = await clickFeedSelector();
-        if (!selectorOpened) {
-            log("❌ Не удалось открыть dropdown. Переключаюсь на умную стратегию.");
-            await runSmartStrategy();
+        // === ФАЗА 1: Нужно открыть меню и перейти в Клубы ===
+        if (!url.startsWith('/clubs')) {
+            log('Открываю меню навигации...');
+            if (clickSandwichMenu()) {
+                await sleep(2500);
+                
+                // Пробуем найти и кликнуть "Клубы" в меню
+                const menuTexts = ['Клубы', 'Clubs', 'Мои клубы', 'My Clubs', 'Your Clubs'];
+                if (clickMenuItemByText(menuTexts)) {
+                    log('Переходу в Клубы...');
+                    await sleep(5000);
+                    return; // Страница перезагрузится, бот рестартанет
+                }
+            }
+            
+            // Fallback: прямой переход
+            log('Прямой переход на /clubs/search...');
+            window.location.href = 'https://www.strava.com/clubs/search';
+            await sleep(5000);
             return;
         }
         
-        // Собираем опции из открытого dropdown
-        feeds = getFeedOptions();
-        log(`📊 Найдено ${feeds.length} лент в dropdown`);
-        feeds.forEach((f, i) => log('  ' + (i+1) + '. [' + f.text + ']'));
-        
-        if (feeds.length <= 1) {
-            log("⚠️ Найдена только 1 лента. Пробую ещё раз...");
-            await sleep(1000);
-            feeds = getFeedOptions();
-            if (feeds.length <= 1) {
-                log("❌ В dropdown только 1 лента. Переключаюсь на умную стратегию.");
-                await runSmartStrategy();
+        // === ФАЗА 2: На странице поиска/списка клубов ===
+        if (url === '/clubs/search' || url === '/clubs') {
+            log('На странице поиска клубов');
+            
+            // Загружаем сохраненный список
+            let clubs = [];
+            try {
+                const saved = localStorage.getItem('sk_clubs');
+                if (saved) clubs = JSON.parse(saved);
+            } catch(e) {}
+            
+            let visited = [];
+            try {
+                const savedVisited = localStorage.getItem('sk_visited');
+                if (savedVisited) visited = JSON.parse(savedVisited);
+            } catch(e) {}
+            const visitedSet = new Set(visited);
+            
+            let currentIndex = parseInt(localStorage.getItem('sk_index') || '0');
+            
+            // Собираем клубы со страницы
+            const found = getClubLinksFromPage();
+            log('Найдено клубов на странице: ' + found.length);
+            
+            if (found.length > 0) {
+                // Добавляем новые клубы в список
+                for (const club of found) {
+                    if (!clubs.includes(club)) {
+                        clubs.push(club);
+                    }
+                }
+                localStorage.setItem('sk_clubs', JSON.stringify(clubs));
+                log('Всего в списке: ' + clubs.length);
+            }
+            
+            // Если список пуст - прокручиваем чтобы загрузить больше
+            if (clubs.length === 0 || (currentIndex >= clubs.length && found.length === 0)) {
+                log('Прокручиваю для загрузки клубов...');
+                window.scrollTo(0, document.body.scrollHeight);
+                await sleep(3000);
+                
+                const newFound = getClubLinksFromPage();
+                for (const club of newFound) {
+                    if (!clubs.includes(club)) {
+                        clubs.push(club);
+                    }
+                }
+                
+                if (clubs.length > 0) {
+                    localStorage.setItem('sk_clubs', JSON.stringify(clubs));
+                    currentIndex = 0;
+                    localStorage.setItem('sk_index', '0');
+                } else {
+                    log('Клубы не найдены. Сброс и попытка через 30с...');
+                    localStorage.removeItem('sk_clubs');
+                    localStorage.removeItem('sk_visited');
+                    localStorage.removeItem('sk_index');
+                    await sleep(30000);
+                    window.location.reload();
+                    return;
+                }
+            }
+            
+            // Находим следующий непосещенный клуб
+            let nextClub = null;
+            while (currentIndex < clubs.length) {
+                const club = clubs[currentIndex];
+                if (!visitedSet.has(club)) {
+                    nextClub = club;
+                    break;
+                }
+                currentIndex++;
+            }
+            
+            if (nextClub) {
+                log('Перехожу в клуб #' + (currentIndex + 1) + ' из ' + clubs.length + ': ' + nextClub);
+                localStorage.setItem('sk_index', currentIndex.toString());
+                
+                // Ищем ссылку на странице
+                const link = document.querySelector('a[href="' + nextClub + '"]');
+                if (link) {
+                    simulateClick(link);
+                } else {
+                    window.location.href = 'https://www.strava.com' + nextClub;
+                }
+                await sleep(5000);
+                return;
+            } else {
+                log('Все клубы пройдены! Сбрасываю и начинаю заново.');
+                localStorage.removeItem('sk_clubs');
+                localStorage.removeItem('sk_visited');
+                localStorage.setItem('sk_index', '0');
+                window.scrollTo(0, 0);
+                await sleep(2000);
                 return;
             }
         }
         
-        // Закрываем dropdown
-        document.body.click();
-        await sleep(500);
-        
-        // ГЛАВНЫЙ ЦИКЛ: по очереди выбираем ленты из dropdown
-        while (!window.kudosBotShouldStop) {
-            const feed = feeds[feedIndex];
-            log(`=== 📰 ${feed.text} (${feedIndex + 1}/${feeds.length}) ===`);
+        // === ФАЗА 3: На странице конкретного клуба /clubs/XXX ===
+        const clubMatch = url.match(/\/clubs\/(\d+)/);
+        if (clubMatch) {
+            const clubId = clubMatch[1];
+            const clubUrl = '/clubs/' + clubId;
+            log('В клубе #' + clubId);
             
-            // Сохраняем текущий индекс
+            // Отмечаем как посещенный
+            let visited = [];
             try {
-                localStorage.setItem('strakudos_feed_index', feedIndex.toString());
-                localStorage.setItem('strakudos_feed_list', JSON.stringify(feeds.map(f => f.text)));
+                const savedVisited = localStorage.getItem('sk_visited');
+                if (savedVisited) visited = JSON.parse(savedVisited);
             } catch(e) {}
-            
-            // ШАГ 1: Открываем dropdown
-            log("  [1] Открываю dropdown...");
-            const opened = await clickFeedSelector();
-            if (!opened) {
-                log("  ⚠️ Не удалось открыть dropdown, пробую ещё раз...");
-                await sleep(1000);
-                continue;
+            if (!visited.includes(clubUrl)) {
+                visited.push(clubUrl);
+                localStorage.setItem('sk_visited', JSON.stringify(visited));
             }
             
-            // ШАГ 2: Находим и кликаем на нужную опцию
-            log("  [2] Ищу опцию [" + feed.text + "]...");
-            const currentOptions = getFeedOptions();
-            
-            // Ищем опцию по тексту (точное или частичное совпадение)
-            let targetOption = currentOptions.find(o => 
-                o.text.trim() === feed.text.trim()
-            );
-            
-            // Если не нашли точное совпадение — ищем по части текста
-            if (!targetOption) {
-                targetOption = currentOptions.find(o => 
-                    o.text.toLowerCase().includes(feed.text.toLowerCase()) ||
-                    feed.text.toLowerCase().includes(o.text.toLowerCase())
-                );
+            // Ищем и кликаем вкладку активности
+            const tab = findActivityTab();
+            if (tab && !isTabActive(tab)) {
+                log('Кликаю на вкладку активности');
+                simulateClick(tab);
+                await sleep(4000);
+                return;
             }
             
-            // Если всё ещё не нашли — ищем по порядковому номеру
-            if (!targetOption && feedIndex < currentOptions.length) {
-                targetOption = currentOptions[feedIndex];
-                log(`  ⚠️ Опция не найдена по тексту, использую #${feedIndex + 1}`);
-            }
-            
-            if (!targetOption) {
-                log('  ❌ Опция [' + feed.text + '] не найдена в dropdown. Пропускаю...');
-                feedIndex = (feedIndex + 1) % feeds.length;
-                document.body.click(); // Закрываем dropdown
+            if (!tab) {
+                log('Вкладка активности не найдена, прокручиваю...');
+                window.scrollBy({ top: 300, behavior: 'auto' });
                 await sleep(2000);
-                continue;
-            }
-            
-            // Кликаем на опцию
-            log('  [3] Кликаю на [' + targetOption.text + ']...');
-            directClick(targetOption.el);
-            
-            // Ждем обновления контента (SPA — без перезагрузки)
-            log("  [4] Жду обновления контента...");
-            await sleep(3000);
-            
-            // Проверяем что dropdown закрылся
-            document.body.click();
-            await sleep(500);
-            
-            // ШАГ 3: Лайкаем записи в текущей ленте
-            log("  [5] Лайкаю записи...");
-            await scrollToTop();
-            await sleep(1000);
-            
-            const clicked = await scrollAndLike(30);
-            totalLiked += clicked;
-            
-            log(`  ✅ Лайкнуто: ${clicked} (всего: ${totalLiked})`);
-            
-            if (clicked === 0) {
-                cyclesWithoutLikes++;
-                log(`  📭 Пустая лента (${cyclesWithoutLikes}/3)`);
-                
-                if (cyclesWithoutLikes >= 3) {
-                    log("  💤 Все ленты пусты, делаю паузу 30с...");
-                    await sleep(30000);
-                    cyclesWithoutLikes = 0;
+                const tabAgain = findActivityTab();
+                if (tabAgain && !isTabActive(tabAgain)) {
+                    simulateClick(tabAgain);
+                    await sleep(4000);
+                    return;
                 }
-            } else {
-                cyclesWithoutLikes = 0;
             }
             
-            // Переходим к следующей ленте
-            feedIndex = (feedIndex + 1) % feeds.length;
-            log(`  ➡️ Следующая лента...`);
-            await sleep(2000);
+            // Проверяем, есть ли тренировки в ленте
+            const activities = document.querySelectorAll('[data-testid="web-feed-entry"], [data-testid="feed-entry"], .activity, .entity-details, .activity-card, [class*="activity" i]');
+            log('Найдено тренировок: ' + activities.length);
+            
+            if (activities.length === 0) {
+                log('Нет тренировок в клубе, возвращаюсь к списку');
+                goToNextClub();
+                return;
+            }
+            
+            // Лайкаем и прокручиваем
+            const liked = await scrollAndLikeClubFeed();
+            log('Всего лайкнуто в клубе: ' + liked);
+            
+            // Если лайков мало или ноль - лента закончилась
+            if (liked < 2) {
+                log('Лента в клубе закончилась, перехожу к следующему');
+                goToNextClub();
+            }
+            
+            return;
         }
     }
 
