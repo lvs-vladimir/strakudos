@@ -115,13 +115,13 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 
-                if (url != null && url.contains("strava.com/dashboard")) {
+                if (url != null && (url.contains("strava.com/dashboard") || url.contains("strava.com/clubs/"))) {
                     tvStatus.text = if (isBotRunning) "РАБОТАЕТ" else "ВХОД ВЫПОЛНЕН (ГОТОВ)"
                     tvStatus.setTextColor(android.graphics.Color.parseColor("#00F0FF"))
                     btnToggle.isEnabled = true
                     btnToggle.alpha = 1.0f
                     if (isBotRunning) {
-                        Log.d(TAG, "Dashboard loaded, bot was running, will restart in 2s...")
+                        Log.d(TAG, "Feed page loaded, bot was running, will restart in 2s...")
                         // Даем React-приложению время отрендерить контент перед запуском бота
                         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                             if (isBotRunning) {
