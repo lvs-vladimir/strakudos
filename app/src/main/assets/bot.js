@@ -1,4 +1,6 @@
+// Strakudos Bot v1.3.9 - Club rotation with card-by-card processing
 (function() {
+    console.log("[KudosBot] Loading bot v1.3.9...");
     if (window.kudosBotRunning) {
         console.log("Бот уже запущен.");
         return;

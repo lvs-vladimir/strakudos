@@ -96,11 +96,16 @@ class MainActivity : AppCompatActivity() {
         settings.useWideViewPort = true
         settings.loadWithOverviewMode = true
         settings.javaScriptCanOpenWindowsAutomatically = true
+        // Отключаем кэш чтобы всегда загружать свежий bot.js
+        settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
         
         settings.userAgentString = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
 
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
+        
+        // Очищаем кэш при запуске
+        webView.clearCache(true)
 
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
@@ -273,6 +278,10 @@ class MainActivity : AppCompatActivity() {
         val maxMs = sharedPref.getInt("max_delay", 12000)
         val strategy = sharedPref.getString("strategy", "smart") ?: "smart"
         
+        // Очищаем кэш WebView чтобы загрузить свежий bot.js
+        webView.clearCache(true)
+        webView.settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
+        
         webView.evaluateJavascript("window.kudosMinDelay = $minMs; window.kudosMaxDelay = $maxMs; window.kudosStrategy = '$strategy';", null)
 
         val botScript = readAssetFile("bot.js")
@@ -325,6 +334,10 @@ class MainActivity : AppCompatActivity() {
         val minMs = sharedPref.getInt("min_delay", 5000)
         val maxMs = sharedPref.getInt("max_delay", 12000)
         val strategy = sharedPref.getString("strategy", "smart") ?: "smart"
+        // Очищаем кэш WebView чтобы загрузить свежий bot.js
+        webView.clearCache(true)
+        webView.settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
+        
         webView.evaluateJavascript("window.kudosMinDelay = $minMs; window.kudosMaxDelay = $maxMs; window.kudosStrategy = '$strategy';", null)
         
         val botScript = readAssetFile("bot.js")
