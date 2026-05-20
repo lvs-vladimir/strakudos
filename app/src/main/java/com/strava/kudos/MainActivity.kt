@@ -1,7 +1,10 @@
 package com.strava.kudos
 
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import android.util.Log
 import android.webkit.JavascriptInterface
@@ -32,6 +35,17 @@ class MainActivity : AppCompatActivity() {
 
     private var kudosCount = 0
     private var isBotRunning = false
+
+    private val serviceStopReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.strava.kudos.SERVICE_STOPPED") {
+                Log.d(TAG, "Received SERVICE_STOPPED broadcast")
+                if (isBotRunning) {
+                    stopBot()
+                }
+            }
+        }
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -168,6 +182,10 @@ class MainActivity : AppCompatActivity() {
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
         val strategy = sharedPref.getString("strategy", "smart") ?: "smart"
         updateStrategyText(strategy)
+
+        // Регистрируем receiver для остановки из уведомления
+        registerReceiver(serviceStopReceiver, IntentFilter("com.strava.kudos.SERVICE_STOPPED"),
+            Context.RECEIVER_NOT_EXPORTED)
     }
 
     override fun onPause() {
@@ -188,6 +206,11 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "onDestroy called")
+        try {
+            unregisterReceiver(serviceStopReceiver)
+        } catch (e: IllegalArgumentException) {
+            // Receiver may not be registered
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
