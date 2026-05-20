@@ -237,88 +237,103 @@
     }
     
     async function clickFeedSelector() {
-        log("🔍 Ищу селектор лент (стрелка рядом с 'Подписки'/'Following')...");
+        log("🔍 Ищу селектор лент (кликабельный заголовок 'Подписки')...");
         
         window.scrollTo({ top: 0, behavior: 'auto' });
         await sleep(500);
         
-        // СТРАТЕГИЯ 1: Ищем элемент с текстом ленты и aria-expanded в одном элементе
-        const allElements = document.querySelectorAll('button, [role="button"], div, span, a');
+        // СТРАТЕГИЯ: Ищем кликабельный элемент с текстом ленты в заголовке
+        // Это может быть: button, div[onclick], span внутри button, и т.д.
         
-        for (const el of allElements) {
+        const selectors = [
+            'button', '[role="button"]', 'div[onclick]', 'a[onclick]',
+            'div', 'span', 'h1', 'h2', 'h3', 'p', 'a'
+        ];
+        
+        for (const selector of selectors) {
+            const elements = document.querySelectorAll(selector);
+            
+            for (const el of elements) {
+                const rect = el.getBoundingClientRect();
+                // Только видимые элементы в верхней части страницы
+                if (rect.top < 0 || rect.top > 300) continue;
+                if (rect.width < 50 || rect.height < 15) continue;
+                if (rect.width > 400) continue; // Не слишком широкие
+                
+                const text = (el.textContent || '').trim();
+                const lower = text.toLowerCase();
+                
+                // Ищем текст который точно является названием ленты
+                const isFeedTitle = lower === 'подписки' || 
+                                    lower === 'following' ||
+                                    lower === 'мои тренировки' ||
+                                    lower === 'my activities' ||
+                                    lower === 'feeds' ||
+                                    lower.includes('altay') ||
+                                    lower.includes('wild siberia') ||
+                                    lower.includes('barnaul') ||
+                                    lower.includes('барнаул') ||
+                                    lower.includes('yolochka') ||
+                                    lower.includes('лыжи');
+                
+                if (!isFeedTitle) continue;
+                
+                // Проверяем что элемент кликабельный
+                const isClickable = el.tagName === 'BUTTON' ||
+                                     el.tagName === 'A' ||
+                                     el.getAttribute('role') === 'button' ||
+                                     el.onclick ||
+                                     el.getAttribute('onclick') ||
+                                     el.style.cursor === 'pointer' ||
+                                     window.getComputedStyle(el).cursor === 'pointer' ||
+                                     el.getAttribute('aria-expanded') !== null ||
+                                     el.getAttribute('tabindex') !== null;
+                
+                // Если сам элемент не кликабельный — проверим родителя
+                if (!isClickable) {
+                    let parent = el.parentElement;
+                    let depth = 0;
+                    while (parent && depth < 3) {
+                        const parentClickable = parent.tagName === 'BUTTON' ||
+                                                parent.tagName === 'A' ||
+                                                parent.getAttribute('role') === 'button' ||
+                                                parent.onclick ||
+                                                parent.getAttribute('onclick') ||
+                                                parent.getAttribute('aria-expanded') !== null;
+                        if (parentClickable) {
+                            log('   🎯 Найден кликабельный родитель для [' + text + ']: ' + parent.tagName);
+                            directClick(parent);
+                            await sleep(1500);
+                            return true;
+                        }
+                        parent = parent.parentElement;
+                        depth++;
+                    }
+                } else {
+                    log('   🎯 Найден кликабельный элемент [' + text + ']: ' + el.tagName);
+                    directClick(el);
+                    await sleep(1500);
+                    return true;
+                }
+            }
+        }
+        
+        // Fallback: если не нашли кликабельный элемент — кликаем на первый видимый "Подписки"
+        const allText = document.querySelectorAll('*');
+        for (const el of allText) {
             const rect = el.getBoundingClientRect();
             if (rect.top < 0 || rect.top > 200) continue;
-            if (rect.width === 0 || rect.height === 0) continue;
             
-            const text = (el.textContent || '').trim();
-            const lower = text.toLowerCase();
-            const hasFeedText = lower === 'подписки' || lower === 'following' || lower === 'feeds' || lower.includes('feed');
-            
-            // Проверяем что у элемента есть aria-expanded (значит это toggle)
-            const hasToggle = el.getAttribute('aria-expanded') !== null;
-            
-            if (hasFeedText && hasToggle) {
-                log('   🎯 Найден toggle с текстом ленты: [' + text + '] aria-expanded=' + el.getAttribute('aria-expanded'));
+            const text = (el.textContent || '').trim().toLowerCase();
+            if (text === 'подписки' || text === 'following') {
+                log('   🎯 Fallback: кликаю на [' + el.textContent.trim() + ']');
                 directClick(el);
                 await sleep(1500);
                 return true;
             }
         }
         
-        // СТРАТЕГИЯ 2: Ищем кнопку-стрелку которая ЯВНО рядом с текстом ленты
-        // Находим сначала текст ленты
-        let feedLabel = null;
-        let feedLabelRect = null;
-        
-        for (const el of allElements) {
-            const text = (el.textContent || '').trim().toLowerCase();
-            if (text === 'подписки' || text === 'following') {
-                const rect = el.getBoundingClientRect();
-                if (rect.top >= 0 && rect.top < 200 && rect.width > 20) {
-                    feedLabel = el;
-                    feedLabelRect = rect;
-                    break;
-                }
-            }
-        }
-        
-        if (feedLabel && feedLabelRect) {
-            const labelCenterX = feedLabelRect.left + feedLabelRect.width / 2;
-            const labelCenterY = feedLabelRect.top + feedLabelRect.height / 2;
-            
-            // Ищем ближайшую кнопку toggle (aria-expanded) справа
-            const toggles = document.querySelectorAll('[aria-expanded]');
-            let bestToggle = null;
-            let bestDist = Infinity;
-            
-            for (const btn of toggles) {
-                const rect = btn.getBoundingClientRect();
-                if (rect.top < 0 || rect.top > 200) continue;
-                if (rect.width === 0 || rect.height === 0) continue;
-                
-                const btnCenterX = rect.left + rect.width / 2;
-                const btnCenterY = rect.top + rect.height / 2;
-                
-                // Должен быть справа и близко
-                if (btnCenterX <= labelCenterX) continue;
-                if (Math.abs(btnCenterY - labelCenterY) > 100) continue;
-                
-                const dist = Math.sqrt(Math.pow(btnCenterX - labelCenterX, 2) + Math.pow(btnCenterY - labelCenterY, 2));
-                if (dist < 200 && dist < bestDist) {
-                    bestDist = dist;
-                    bestToggle = btn;
-                }
-            }
-            
-            if (bestToggle) {
-                log('   🎯 Найден toggle рядом с [' + feedLabel.textContent.trim() + '], расстояние: ' + Math.round(bestDist) + 'px');
-                directClick(bestToggle);
-                await sleep(1500);
-                return true;
-            }
-        }
-        
-        log("❌ Селектор лент (toggle рядом с Подписки) не найден.");
+        log("❌ Селектор лент не найден.");
         return false;
     }
     
