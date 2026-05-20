@@ -1,6 +1,6 @@
-// Strakudos Bot v1.4.3 - Skip own activities and old (>3d) activities in clubs
+// Strakudos Bot v1.4.4 - Skip 10+ consecutive already-liked activities, switch club
 (function() {
-    console.log("[KudosBot] Loading bot v1.4.3...");
+    console.log("[KudosBot] Loading bot v1.4.4...");
     if (window.kudosBotRunning) {
         console.log("Бот уже запущен.");
         return;
@@ -531,10 +531,12 @@
             const cards = document.querySelectorAll('[data-testid="web-feed-entry"], [data-testid="feed-entry"]');
             log('Найдено карточек: ' + cards.length);
             
-            let newCardsCount = 0;
-            let skippedCardsCount = 0;
-            
-            for (const card of cards) {
+        let newCardsCount = 0;
+        let skippedCardsCount = 0;
+        let consecutiveAlreadyLiked = 0; // Счетчик подряд уже-лайкнутых
+        const MAX_CONSECUTIVE_LIKED = 10; // После 10 подряд — уходим из клуба
+        
+        for (const card of cards) {
                 if (window.kudosBotShouldStop) break;
                 
                 // Получаем уникальный ID карточки
@@ -607,8 +609,16 @@
                 
                 if (!kudosBtn) {
                     log('  В карточке нет кнопки лайка (уже лайкнуто?)');
+                    consecutiveAlreadyLiked++;
+                    if (consecutiveAlreadyLiked >= MAX_CONSECUTIVE_LIKED) {
+                        log('  🔁 ' + consecutiveAlreadyLiked + ' подряд тренировок уже лайкнуты. Ухожу в следующий клуб.');
+                        return totalLiked;
+                    }
                     continue;
                 }
+                
+                // Кнопка найдена и не лайкнута — сбрасываем счетчик
+                consecutiveAlreadyLiked = 0;
                 
                 // Проверяем URL
                 if (!window.location.pathname.includes('/clubs/')) {
