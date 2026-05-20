@@ -48,6 +48,19 @@
         // Находим все карточки активностей
         const cards = document.querySelectorAll('[data-testid="web-feed-entry"], [data-testid="feed-entry"]');
         
+        // ОТЛАДКА: показываем все кнопки в первой карточке
+        if (cards.length > 0) {
+            const firstCard = cards[0];
+            const allBtns = firstCard.querySelectorAll('button');
+            log('ОТЛАДКА: кнопки в первой карточке:');
+            allBtns.forEach((b, i) => {
+                const tid = b.getAttribute('data-testid') || '';
+                const aria = b.getAttribute('aria-label') || '';
+                const rect = b.getBoundingClientRect();
+                log('  [' + i + '] testid=' + tid + ' aria=' + aria + ' size=' + Math.round(rect.width) + 'x' + Math.round(rect.height));
+            });
+        }
+        
         for (const card of cards) {
             try {
                 // Ищем кнопку лайка ВНУТРИ карточки — ТОЛЬКО button элементы
@@ -66,57 +79,60 @@
                     const text = (btn.textContent || '').toLowerCase().trim();
                     
                     // Проверяем является ли кнопка лайком
-                    // ТОЛЬКО точные совпадения, не включающие!
+                    // СТРОГИЙ поиск чтобы не пропускать лайки
                     let isKudos = false;
                     let reason = '';
                     
-                    // 1. data-testid="kudos_button" — главный признак
-                    if (testId === 'kudos_button') {
+                    // Сначала проверяем data-testid (самый надежный)
+                    if (testId.includes('kudos')) {
                         isKudos = true;
-                        reason = 'data-testid';
+                        reason = 'data-testid=' + testId;
                     }
-                    // 2. aria-label="give kudos" — точное совпадение
-                    else if (aria === 'give kudos') {
+                    // aria-label содержит "give kudos" (в любом регистре)
+                    else if (aria.includes('give') && aria.includes('kudos')) {
                         isKudos = true;
-                        reason = 'aria-label=give kudos';
+                        reason = 'aria-label=' + aria;
                     }
-                    // 3. title="kudos" — точное совпадение
-                    else if (title === 'kudos') {
+                    // aria-label содержит только "kudos" но не содержит цифр/popup слов
+                    else if (aria.includes('kudos') && !/\d/.test(aria) && !aria.includes('view') && !aria.includes('people')) {
                         isKudos = true;
-                        reason = 'title=kudos';
+                        reason = 'aria-label-simple=' + aria;
                     }
-                    // 4. SVG с сердцем/палец вверх
+                    // SVG иконка в маленькой кнопке без текста
                     else {
                         const svg = btn.querySelector('svg');
-                        if (svg) {
-                            const svgHtml = svg.innerHTML.toLowerCase();
-                            // Ищем heart icon или thumbs up
-                            if (svgHtml.includes('heart') || 
-                                svgHtml.includes('thumb') ||
-                                svgHtml.includes('m12') || // часто встречается в иконках Strava
-                                svgHtml.includes('path d=')) {
-                                isKudos = true;
-                                reason = 'svg icon';
+                        if (svg && !text.trim()) {
+                            const rect = btn.getBoundingClientRect();
+                            // Кнопка лайка — маленькая 24-48px, без текста
+                            if (rect.width >= 20 && rect.width <= 60 && rect.height >= 20 && rect.height <= 60) {
+                                const svgHtml = svg.innerHTML.toLowerCase();
+                                if (svgHtml.includes('path') || svgHtml.includes('heart') || svgHtml.includes('thumb')) {
+                                    isKudos = true;
+                                    reason = 'svg-empty-btn(' + Math.round(rect.width) + 'x' + Math.round(rect.height) + ')';
+                                }
                             }
                         }
                     }
                     
-                    // ❌ ИСКЛЮЧАЕМ: popup со списком людей (содержит числа и "kudos")
+                    // ❌ ИСКЛЮЧАЕМ popup и ложные срабатывания
                     if (isKudos) {
-                        // Если aria-label содержит цифры — это popup "5 kudos"
+                        // Исключаем если aria-label содержит цифры — "5 kudos"
                         if (/\d/.test(aria)) {
-                            log('  Исключаю (popup с числом): ' + aria);
+                            log('  Исключаю (цифры): ' + aria);
                             isKudos = false;
                         }
-                        // Если текст содержит "people" или "liked" — это тоже popup
-                        else if (text.includes('people') || text.includes('liked') || text.includes('liked this')) {
-                            log('  Исключаю (popup people): ' + text);
+                        // Исключаем если содержит текст popup
+                        else if (text.includes('people') || text.includes('liked this') || text.includes('view')) {
+                            log('  Исключаю (popup текст): ' + text);
                             isKudos = false;
                         }
-                        // Если aria-label содержит "view" — это popup
-                        else if (aria.includes('view')) {
-                            log('  Исключаю (popup view): ' + aria);
-                            isKudos = false;
+                        // Исключаем слишком большие кнопки
+                        else {
+                            const rect = btn.getBoundingClientRect();
+                            if (rect.width > 120 || rect.height > 80) {
+                                log('  Исключаю (большая): ' + rect.width + 'x' + rect.height);
+                                isKudos = false;
+                            }
                         }
                     }
                     
@@ -542,7 +558,7 @@
         let totalLiked = 0;
         let scrollAttempts = 0;
         let lastY = window.scrollY;
-        const maxScrolls = 30; // Увеличено для прокрутки длинных лент
+        const maxScrolls = 50; // Увеличено для прокрутки длинных лент
         const processedThisSession = new Set(); // Тренировки, обработанные в этой сессии (не лайкать повторно)
         
         log('Начинаю лайкать тренировки в клубе...');
@@ -638,7 +654,7 @@
                     updateStats(athlete);
                     likedInCycle++;
                     totalLiked++;
-                    await sleep(Math.max(100, Math.floor(min / 3)));
+                    await sleep(2000); // Ждем обновления DOM (кнопка меняет состояние)
                 } else {
                     log('❌ Не удалось кликнуть на лайк');
                 }
@@ -660,9 +676,9 @@
             
             log('Лайкнуто в цикле: ' + likedInCycle + ', пропущено (дубли): ' + skippedInCycle + ', всего: ' + totalLiked);
             
-            // Прокручиваем постепенно
-            window.scrollBy({ top: 800, behavior: 'auto' });
-            await sleep(3000);
+            // Прокручиваем постепенно — маленький шаг чтобы не пропустить
+            window.scrollBy({ top: 400, behavior: 'auto' });
+            await sleep(5000);
             scrollAttempts++;
             
             // Проверяем, изменился ли скролл
