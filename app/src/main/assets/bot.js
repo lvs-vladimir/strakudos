@@ -6,7 +6,7 @@
     window.kudosBotRunning = true;
     window.kudosBotShouldStop = false;
     
-    // Восстанавливаем likedActivities из localStorage (чтобы не лайкать повторно при навигации)
+    // Восстанавливаем likedActivities из localStorage
     try {
         const saved = localStorage.getItem('strakudos_liked');
         window.likedActivities = saved ? new Set(JSON.parse(saved)) : new Set();
@@ -15,13 +15,6 @@
     }
 
     const STRATEGY = window.kudosStrategy || 'smart';
-    
-    // Функция для сохранения likedActivities
-    function saveLikedActivities() {
-        try {
-            localStorage.setItem('strakudos_liked', JSON.stringify([...window.likedActivities]));
-        } catch(e) {}
-    }
 
     function log(msg) {
         console.log("[KudosBot] " + msg);
@@ -31,15 +24,21 @@
     function updateStats(name) {
         if (window.AndroidApp) window.AndroidApp.onKudosGiven(name);
     }
-    
-    // Сохраняем likedActivities периодически
-    setInterval(() => {
-        saveLikedActivities();
-    }, 30000); // Каждые 30 секунд
 
     function sleep(ms) {
         return new Promise(r => setTimeout(r, ms));
     }
+
+    function saveLikedActivities() {
+        try {
+            localStorage.setItem('strakudos_liked', JSON.stringify([...window.likedActivities]));
+        } catch(e) {}
+    }
+
+    // Сохраняем likedActivities периодически
+    setInterval(() => {
+        saveLikedActivities();
+    }, 30000);
 
     function isInViewport(el) {
         const rect = el.getBoundingClientRect();
@@ -121,7 +120,7 @@
                                aria.includes('kudos') || 
                                html.includes('kudos') ||
                                cls.includes('kudos');
-                                
+                                 
                 if (!isKudos) return;
                 
                 const isLiked = (testId === 'un-kudos_button') || 
@@ -177,29 +176,7 @@
         await sleep(500);
     }
 
-    async function refreshFeed() {
-        log("Обновляю ленту...");
-        window.scrollTo({ top: 0, behavior: 'auto' });
-        await sleep(300);
-        
-        // Пробуем нажать кнопку обновления если есть
-        const refreshBtn = document.querySelector('button[data-testid*="refresh" i], [class*="refresh" i] button');
-        if (refreshBtn) {
-            refreshBtn.click();
-            log("Нажата кнопка обновления");
-            await sleep(2000);
-            return;
-        }
-        
-        // Симулируем pull-to-refresh скроллом вверх
-        log("Pull-to-refresh: скролл вверх...");
-        window.scrollTo({ top: -200, behavior: 'smooth' });
-        await sleep(1500);
-        window.scrollTo({ top: 0, behavior: 'auto' });
-        await sleep(2000);
-    }
-
-    async function processVisibleButtons() {
+    async function likeVisibleActivities() {
         const buttons = findKudosButtons();
         let clicked = 0;
         
@@ -242,7 +219,294 @@
         return clicked;
     }
 
-    // ===== STRATEGIES =====
+    async function scrollAndLike(maxScrolls) {
+        let totalClicked = 0;
+        let scrolls = 0;
+        
+        while (scrolls < maxScrolls && !window.kudosBotShouldStop) {
+            const clicked = await likeVisibleActivities();
+            totalClicked += clicked;
+            
+            if (clicked === 0) {
+                window.scrollBy({ top: 600, behavior: 'auto' });
+                await sleep(500);
+                scrolls++;
+            }
+        }
+        
+        return totalClicked;
+    }
+
+    // ===== ОПРЕДЕЛЕНИЕ ТЕКУЩЕЙ ЛЕНТЫ =====
+    
+    function detectCurrentFeed() {
+        const url = window.location.pathname;
+        
+        if (url.includes('/clubs/') && url.includes('/dashboard')) {
+            const match = url.match(/\/clubs\/(\d+)/);
+            if (match) return { type: 'club', id: match[1] };
+        }
+        
+        if (url === '/dashboard' || url === '/dashboard/following' || url === '/') {
+            return { type: 'following' };
+        }
+        
+        return { type: 'unknown' };
+    }
+
+    // ===== РАБОТА С ВЫПАДАЮЩИМ СПИСКОМ ЛЕНТ =====
+    
+    function findFeedSelector() {
+        // Пробуем разные селекторы для кнопки выбора ленты
+        const selectors = [
+            '[data-testid*="feed-selector" i]',
+            '[data-testid*="feed" i] button',
+            '[class*="feed-selector" i]',
+            '[class*="feed-dropdown" i]',
+            'button[class*="dropdown" i]',
+            '[aria-label*="feed" i]',
+            '[aria-label*="лент" i]',
+            // На Strava часто используется просто кнопка с текстом
+            'button:has-text("Following")',
+            'button:has-text("Подписки")',
+        ];
+        
+        for (const sel of selectors) {
+            try {
+                const el = document.querySelector(sel);
+                if (el) return el;
+            } catch(e) {}
+        }
+        
+        // Ищем по текстовому содержимому
+        const allButtons = document.querySelectorAll('button, a, [role="button"]');
+        for (const btn of allButtons) {
+            const text = btn.textContent?.toLowerCase() || '';
+            if (text.includes('following') || text.includes('подписки') || 
+                text.includes('feed') || text.includes('лента') ||
+                text.includes('clubs') || text.includes('клубы')) {
+                return btn;
+            }
+        }
+        
+        return null;
+    }
+    
+    function findFeedOptions() {
+        const options = [];
+        
+        // Ищем все элементы выпадающего списка
+        const selectors = [
+            '[role="menuitem"]',
+            '[role="option"]',
+            '[data-testid*="feed-option" i]',
+            '[class*="dropdown-item" i]',
+            '[class*="menu-item" i]',
+            'li a[href*="/clubs/"]',
+            'li a[href="/dashboard"]',
+            'li a[href="/dashboard/following"]',
+        ];
+        
+        for (const sel of selectors) {
+            try {
+                const elements = document.querySelectorAll(sel);
+                elements.forEach(el => {
+                    const href = el.getAttribute('href') || el.closest('a')?.getAttribute('href') || '';
+                    const text = el.textContent?.trim() || '';
+                    
+                    if (href.includes('/clubs/') || href === '/dashboard' || href === '/dashboard/following' || 
+                        text.toLowerCase().includes('following') || text.toLowerCase().includes('клуб')) {
+                        if (!options.find(o => o.href === href)) {
+                            options.push({ element: el, href: href, text: text });
+                        }
+                    }
+                });
+            } catch(e) {}
+        }
+        
+        // Если не нашли в стандартных селекторах, ищем все ссылки на клубы и dashboard
+        if (options.length === 0) {
+            const allLinks = document.querySelectorAll('a');
+            for (const link of allLinks) {
+                const href = link.getAttribute('href') || '';
+                const text = link.textContent?.trim() || '';
+                
+                if (href.includes('/clubs/') || href === '/dashboard' || href === '/dashboard/following') {
+                    if (!options.find(o => o.href === href)) {
+                        options.push({ element: link, href: href, text: text || 'Feed' });
+                    }
+                }
+            }
+        }
+        
+        return options;
+    }
+    
+    async function openFeedSelector() {
+        const selector = findFeedSelector();
+        if (!selector) {
+            log("Выпадающий список лент не найден");
+            return false;
+        }
+        
+        log("Открываю список лент...");
+        safeClick(selector);
+        await sleep(1000);
+        return true;
+    }
+    
+    async function closeFeedSelector() {
+        // Кликаем в пустое место чтобы закрыть dropdown
+        document.body.click();
+        await sleep(300);
+    }
+    
+    async function switchToFeed(href) {
+        // Для SPA используем History API или кликаем на ссылку
+        log(`Переключаюсь на: ${href}`);
+        
+        // Пробуем найти ссылку и кликнуть
+        const links = document.querySelectorAll(`a[href="${href}"]`);
+        for (const link of links) {
+            if (safeClick(link)) {
+                await sleep(2000); // Ждем загрузки контента
+                return true;
+            }
+        }
+        
+        // Если не получилось кликнуть, используем History API
+        if (window.history && window.history.pushState) {
+            window.history.pushState({}, '', href);
+            // Триггерим событие popstate чтобы React Router обновил view
+            window.dispatchEvent(new PopStateEvent('popstate'));
+            await sleep(2000);
+            return true;
+        }
+        
+        // Последний вариант - просто меняем location (вызывает перезагрузку)
+        window.location.href = 'https://www.strava.com' + href;
+        await sleep(3000);
+        return true;
+    }
+
+    // ===== СТРАТЕГИЯ КЛУБОВ С НАВИГАЦИЕЙ ПО UI =====
+    
+    async function runClubsStrategy() {
+        log("Старт стратегии КЛУБЫ (UI навигация)...");
+        
+        // Пробуем открыть выпадающий список
+        const opened = await openFeedSelector();
+        
+        let feeds = [];
+        
+        if (opened) {
+            // Собираем все доступные ленты из выпадающего списка
+            const options = findFeedOptions();
+            log(`Найдено ${options.length} лент в списке`);
+            
+            feeds = options.map(opt => ({
+                href: opt.href,
+                text: opt.text || opt.href,
+                element: opt.element
+            }));
+            
+            await closeFeedSelector();
+        }
+        
+        // Если не нашли через UI, пробуем через URL
+        if (feeds.length === 0) {
+            log("Не удалось найти ленты в UI, пробуем через URL...");
+            feeds = [
+                { href: '/dashboard', text: 'Following' }
+            ];
+            
+            // Ищем клубы на странице
+            const clubLinks = document.querySelectorAll('a[href*="/clubs/"]');
+            const clubIds = new Set();
+            clubLinks.forEach(link => {
+                const href = link.getAttribute('href') || '';
+                const match = href.match(/\/clubs\/(\d+)/);
+                if (match && !clubIds.has(match[1])) {
+                    clubIds.add(match[1]);
+                    feeds.push({ 
+                        href: `/clubs/${match[1]}/dashboard`, 
+                        text: link.textContent?.trim() || `Club ${match[1]}` 
+                    });
+                }
+            });
+        }
+        
+        if (feeds.length === 0) {
+            log("Не найдено ни одной ленты. Переключаюсь на умную стратегию.");
+            await runSmartStrategy();
+            return;
+        }
+        
+        log(`Ротация между ${feeds.length} лентами: ${feeds.map(f => f.text).join(', ')}`);
+        
+        let feedIndex = 0;
+        let cyclesWithoutLikes = 0;
+        
+        while (!window.kudosBotShouldStop) {
+            const feed = feeds[feedIndex];
+            log(`=== ${feed.text} (${feed.href}) ===`);
+            
+            // Переключаемся на ленту
+            const currentFeed = detectCurrentFeed();
+            const isCurrentFeed = (currentFeed.type === 'following' && feed.href.includes('dashboard')) ||
+                                 (currentFeed.type === 'club' && feed.href.includes(currentFeed.id));
+            
+            if (!isCurrentFeed) {
+                // Открываем селектор и выбираем нужную ленту
+                await openFeedSelector();
+                await sleep(500);
+                
+                // Ищем ссылку на нужную ленту в открытом dropdown
+                const options = findFeedOptions();
+                const targetOption = options.find(opt => opt.href === feed.href || 
+                    opt.href.includes(feed.href.replace('/dashboard', '')));
+                
+                if (targetOption) {
+                    safeClick(targetOption.element);
+                    log(`Выбрана лента: ${feed.text}`);
+                } else {
+                    // Если не нашли в dropdown, используем прямую навигацию
+                    await switchToFeed(feed.href);
+                }
+                
+                await sleep(2000);
+                await closeFeedSelector();
+            } else {
+                log("Уже на нужной ленте");
+            }
+            
+            // Лайкаем в текущей ленте
+            await scrollToTop();
+            await sleep(1000);
+            
+            const clicked = await scrollAndLike(15); // Максимум 15 скроллов на ленту
+            
+            if (clicked === 0) {
+                cyclesWithoutLikes++;
+                log(`В ленте нет новых записей (${cyclesWithoutLikes}/3)`);
+                
+                if (cyclesWithoutLikes >= 3) {
+                    log("Все ленты пусты, делаю паузу...");
+                    await sleep(30000); // 30 секунд пауза
+                    cyclesWithoutLikes = 0;
+                }
+            } else {
+                cyclesWithoutLikes = 0;
+            }
+            
+            // Переходим к следующей ленте
+            feedIndex = (feedIndex + 1) % feeds.length;
+            log(`Переключаюсь на следующую ленту...`);
+            await sleep(2000);
+        }
+    }
+
+    // ===== ОСТАЛЬНЫЕ СТРАТЕГИИ =====
 
     async function runSmartStrategy() {
         log("Старт УМНОЙ стратегии...");
@@ -254,7 +518,7 @@
             cycle++;
             log(`=== Цикл ${cycle} ===`);
             
-            let clicked = await processVisibleButtons();
+            let clicked = await likeVisibleActivities();
             
             if (clicked === 0) {
                 let scrollAttempts = 0;
@@ -266,14 +530,14 @@
                     totalScrolled += scrollAmount;
                     await sleep(Math.max(200, Math.floor(Math.random() * (max() - min())) + min()));
                     
-                    clicked = await processVisibleButtons();
+                    clicked = await likeVisibleActivities();
                     scrollAttempts++;
                 }
                 
                 if (totalScrolled > 3000 || clicked === 0) {
                     log("Достигнут предел ленты");
                     await scrollToTop();
-                    clicked = await processVisibleButtons();
+                    clicked = await likeVisibleActivities();
                     
                     if (clicked === 0 && cycle % 3 === 0) {
                         await refreshFeed();
@@ -291,6 +555,26 @@
         }
     }
 
+    async function refreshFeed() {
+        log("Обновляю ленту...");
+        window.scrollTo({ top: 0, behavior: 'auto' });
+        await sleep(300);
+        
+        const refreshBtn = document.querySelector('button[data-testid*="refresh" i], [class*="refresh" i] button');
+        if (refreshBtn) {
+            refreshBtn.click();
+            log("Нажата кнопка обновления");
+            await sleep(2000);
+            return;
+        }
+        
+        log("Pull-to-refresh: скролл вверх...");
+        window.scrollTo({ top: -200, behavior: 'smooth' });
+        await sleep(1500);
+        window.scrollTo({ top: 0, behavior: 'auto' });
+        await sleep(2000);
+    }
+
     async function runTopOnlyStrategy() {
         log("Старт стратегии ТОЛЬКО НОВЫЕ...");
         let refreshCount = 0;
@@ -300,7 +584,7 @@
             window.scrollTo({ top: 0, behavior: 'auto' });
             await sleep(500);
             
-            const clicked = await processVisibleButtons();
+            const clicked = await likeVisibleActivities();
             
             if (clicked === 0) {
                 refreshCount++;
@@ -345,12 +629,10 @@
             
             if (window.kudosBotShouldStop) break;
             
-            // Скроллим вниз и проверяем, изменилась ли позиция
             lastScrollY = window.scrollY;
             window.scrollBy({ top: 600, behavior: 'auto' });
             await sleep(500);
             
-            // Если скролл не изменился — достигнут конец страницы
             if (window.scrollY === lastScrollY) {
                 noProgressCount++;
                 log(`⬇️ Конец ленты (${noProgressCount}/3)`);
@@ -359,7 +641,6 @@
                     log("🔄 Достигнут конец ленты. Возвращаюсь в начало...");
                     await scrollToTop();
                     noProgressCount = 0;
-                    // После возврата ждем загрузки новых постов
                     await sleep(3000);
                 }
             } else {
@@ -377,10 +658,9 @@
         while (!window.kudosBotShouldStop) {
             cycle++;
             
-            let clicked = await processVisibleButtons();
+            let clicked = await likeVisibleActivities();
             
             if (clicked === 0) {
-                // Медленный скролл как человек
                 const scrollAmount = Math.floor(Math.random() * 300) + 200;
                 window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
                 
@@ -388,7 +668,7 @@
                 log(`Читаю ленту ${(readTime/1000).toFixed(1)} сек...`);
                 await sleep(readTime);
                 
-                clicked = await processVisibleButtons();
+                clicked = await likeVisibleActivities();
                 
                 if (clicked === 0 && cycle % 5 === 0) {
                     log("Делаю большую паузу...");
@@ -399,150 +679,6 @@
             if (!window.kudosBotShouldStop) {
                 await sleep(Math.max(2000, Math.floor(min() / 2)));
             }
-        }
-    }
-
-    // ===== КЛУБЫ (РОТАЦИЯ) =====
-    
-    async function getClubIds() {
-        log("Получаю список клубов...");
-        const clubIds = [];
-        
-        try {
-            // Пробуем найти клубы в меню/навигации на текущей странице
-            const navLinks = document.querySelectorAll('a[href*="/clubs/"]');
-            navLinks.forEach(link => {
-                const match = link.href.match(/\/clubs\/(\d+)/);
-                if (match && !clubIds.includes(match[1])) {
-                    clubIds.push(match[1]);
-                }
-            });
-            
-            if (clubIds.length > 0) {
-                log(`Найдено ${clubIds.length} клубов в навигации`);
-                return clubIds;
-            }
-            
-            // Если не нашли, переходим на страницу клубов
-            log("Переход на страницу клубов...");
-            window.location.href = "https://www.strava.com/clubs";
-            
-            // Ждем загрузки - это прервет выполнение бота
-            // После перезагрузки страницы бот перезапустится
-            await sleep(5000);
-            
-            // Собираем клубы со страницы
-            const clubLinks = document.querySelectorAll('a[href^="/clubs/"], a[href*="strava.com/clubs/"]');
-            clubLinks.forEach(link => {
-                const match = link.href.match(/\/clubs\/(\d+)/);
-                if (match && !clubIds.includes(match[1])) {
-                    clubIds.push(match[1]);
-                }
-            });
-            
-            log(`Найдено ${clubIds.length} клубов`);
-        } catch(e) {
-            log("Ошибка получения клубов: " + e.message);
-        }
-        
-        return clubIds;
-    }
-    
-    async function likeFeed(maxCycles) {
-        let cycle = 0;
-        const min = () => window.kudosMinDelay || 3000;
-        
-        while (cycle < maxCycles && !window.kudosBotShouldStop) {
-            cycle++;
-            let clicked = await processVisibleButtons();
-            
-            if (clicked === 0) {
-                // Скроллим вниз и ищем
-                let scrollAttempts = 0;
-                while (clicked === 0 && scrollAttempts < 10 && !window.kudosBotShouldStop) {
-                    window.scrollBy({ top: 500, behavior: 'auto' });
-                    await sleep(300);
-                    clicked = await processVisibleButtons();
-                    scrollAttempts++;
-                }
-                
-                // Если ничего не нашли после 10 скроллов - лента закончилась
-                if (clicked === 0) {
-                    log("Лента пуста или все лайкнуто");
-                    break;
-                }
-            }
-            
-            await sleep(Math.max(200, Math.floor(min() / 3)));
-        }
-    }
-    
-    async function runClubsStrategy() {
-        log("Старт стратегии КЛУБЫ (ротация)...");
-        
-        // Сначала получаем список клубов
-        // При первом запуске бота на странице dashboard/clubs
-        // или clubs - собираем ID и сохраняем
-        
-        let clubIds = [];
-        
-        // Пробуем восстановить список клубов из localStorage
-        try {
-            const saved = localStorage.getItem('strakudos_clubs');
-            if (saved) {
-                clubIds = JSON.parse(saved);
-                log(`Восстановлено ${clubIds.length} клубов из памяти`);
-            }
-        } catch(e) {}
-        
-        // Если список пуст, пробуем собрать с текущей страницы
-        if (clubIds.length === 0) {
-            // Пробуем найти клубы в боковом меню или навигации
-            const links = document.querySelectorAll('a[href*="/clubs/"]');
-            links.forEach(link => {
-                const match = link.href.match(/\/clubs\/(\d+)/);
-                if (match && !clubIds.includes(match[1])) {
-                    clubIds.push(match[1]);
-                }
-            });
-            
-            if (clubIds.length > 0) {
-                log(`Найдено ${clubIds.length} клубов`);
-                try {
-                    localStorage.setItem('strakudos_clubs', JSON.stringify(clubIds));
-                } catch(e) {}
-            }
-        }
-        
-        // Составляем список фидов для ротации
-        const feeds = [];
-        feeds.push({ name: 'Основная лента', url: 'https://www.strava.com/dashboard' });
-        
-        clubIds.forEach(id => {
-            feeds.push({ name: `Клуб ${id}`, url: `https://www.strava.com/clubs/${id}/dashboard` });
-        });
-        
-        log(`Ротация между ${feeds.length} лентами`);
-        
-        let feedIndex = 0;
-        
-        while (!window.kudosBotShouldStop) {
-            const feed = feeds[feedIndex];
-            log(`=== ${feed.name} ===`);
-            
-            // Переходим на ленту
-            window.location.href = feed.url;
-            
-            // Ждем загрузки - страница перезагрузится и бот перезапустится
-            // Это нормальное поведение, MainActivity перезапустит бот
-            await sleep(4000);
-            
-            // Лайкаем в текущей ленте (3 цикла, потом переключаемся)
-            await likeFeed(3);
-            
-            feedIndex = (feedIndex + 1) % feeds.length;
-            log(`Переключаюсь на следующую ленту...`);
-            await sleep(2000);
         }
     }
 
