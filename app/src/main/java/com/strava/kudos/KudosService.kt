@@ -23,13 +23,13 @@ class KudosService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d("KudosService", "onCreate called")
-        acquireWakeLock()
         createNotificationChannel()
+        acquireWakeLock()
         startPeriodicUpdate()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d("KudosService", "onStartCommand called, action=${intent?.action}")
+        Log.d("KudosService", "onStartCommand called, action=${intent?.action}, intent=${intent != null}")
         
         if (intent?.action == ACTION_STOP) {
             Log.d("KudosService", "Received STOP action, stopping service")
@@ -38,9 +38,25 @@ class KudosService : Service() {
             return START_NOT_STICKY
         }
         
-        // При первом запуске показываем уведомление
-        startForeground(NOTIFICATION_ID, buildNotification())
-        return START_STICKY
+        // Для Android 14+ foreground service можно запустить только из foreground
+        // Если intent == null, значит система пересоздала сервис — мы в фоне, не можем startForeground
+        if (intent == null) {
+            Log.w("KudosService", "Service recreated by system in background, cannot startForeground on Android 14+")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        
+        // Запускаем foreground notification
+        try {
+            startForeground(NOTIFICATION_ID, buildNotification(getKudosCount()))
+            Log.d("KudosService", "startForeground succeeded")
+        } catch (e: Exception) {
+            Log.e("KudosService", "startForeground failed: ${e.message}")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -57,7 +73,7 @@ class KudosService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Strakudos Automation",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Уведомление о работе бота автолайков"
                 setShowBadge(false)
@@ -147,7 +163,7 @@ class KudosService : Service() {
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(openIntent)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
@@ -160,7 +176,7 @@ class KudosService : Service() {
 
     companion object {
         private const val NOTIFICATION_ID = 1001
-        private const val CHANNEL_ID = "strakudos_kudos_channel"
+        private const val CHANNEL_ID = "strakudos_kudos_channel_v2"
         const val ACTION_STOP = "STOP_BOT"
     }
 }
