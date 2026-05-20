@@ -234,114 +234,112 @@
     }
     
     async function clickFeedSelector() {
-        log("🔍 Ищу селектор лент (dropdown рядом с заголовком ленты)...");
+        log("🔍 Ищу селектор лент (стрелку рядом с Подписки)...");
         
-        // СТРАТЕГИЯ 1: Ищем кликабельный элемент который содержит текст ленты И стрелку/иконку
-        // Это должен быть button или div с onclick в верхней части страницы
+        // СТРАТЕГИЯ 1: Находим текст "Подписки", потом ищем КНОПКУ/СТРЕЛКУ рядом с ним
+        const allElements = document.querySelectorAll('span, div, button, a, h1, h2, h3');
+        let feedLabelEl = null;
+        let feedLabelRect = null;
         
-        const topElements = document.querySelectorAll('button, [role="button"], div[onclick], a[onclick]');
+        for (const el of allElements) {
+            const text = (el.textContent || '').trim().toLowerCase();
+            if (text === 'подписки' || text === 'following' || text === 'feeds') {
+                const rect = el.getBoundingClientRect();
+                if (rect.top < 200 && rect.width > 20) {
+                    feedLabelEl = el;
+                    feedLabelRect = rect;
+                    log('   📌 Найден текст ленты: [' + el.textContent.trim() + '] top=' + Math.round(rect.top));
+                    break;
+                }
+            }
+        }
         
-        for (const el of topElements) {
-            const rect = el.getBoundingClientRect();
-            // Должен быть в верхней части страницы (первые 250px)
-            if (rect.top > 250 || rect.width < 80) continue;
+        if (feedLabelEl && feedLabelRect) {
+            const labelCenterX = feedLabelRect.left + feedLabelRect.width / 2;
+            const labelCenterY = feedLabelRect.top + feedLabelRect.height / 2;
             
-            const text = (el.textContent || '').trim();
-            const lowerText = text.toLowerCase();
-            const html = el.innerHTML.toLowerCase();
+            // Ищем ближайший КЛИКАБЕЛЬНЫЙ элемент справа от текста
+            // (стрелку, кнопку, div[onclick], svg и т.д.)
+            const clickableElements = document.querySelectorAll(
+                'button, [role="button"], svg, i[class*="icon" i], [class*="arrow" i], [class*="chevron" i], div[onclick]'
+            );
             
-            // Проверяем что элемент содержит название ленты
-            const hasFeedText = lowerText.includes('подписки') || 
-                               lowerText.includes('following') ||
-                               lowerText.includes('тренировки') ||
-                               lowerText.includes('activities') ||
-                               lowerText.includes('altay') ||
-                               lowerText.includes('wild siberia') ||
-                               lowerText.includes('барнаул') ||
-                               lowerText.includes('yolochka') ||
-                               lowerText.includes('лыжи');
+            let bestBtn = null;
+            let bestDist = Infinity;
             
-            // И стрелку/иконку раскрытия
-            const hasArrow = html.includes('svg') ||
-                            html.includes('icon') ||
-                            html.includes('chevron') ||
-                            html.includes('arrow') ||
-                            html.includes('caret') ||
-                            html.includes('▼') ||
-                            html.includes('▾') ||
-                            el.getAttribute('aria-expanded') !== null;
+            for (const btn of clickableElements) {
+                const rect = btn.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0) continue;
+                
+                const btnCenterX = rect.left + rect.width / 2;
+                const btnCenterY = rect.top + rect.height / 2;
+                
+                // Должен быть СПРАВА от текста (x > label.x) и на той же высоте
+                if (btnCenterX <= labelCenterX) continue;
+                if (Math.abs(btnCenterY - labelCenterY) > 80) continue;
+                
+                const dist = Math.sqrt(
+                    Math.pow(btnCenterX - labelCenterX, 2) + 
+                    Math.pow(btnCenterY - labelCenterY, 2)
+                );
+                
+                if (dist < 300 && dist < bestDist) {
+                    bestDist = dist;
+                    bestBtn = btn;
+                }
+            }
             
-            if (hasFeedText && hasArrow) {
-                log('   🎯 Найден dropdown: [' + text.substring(0, 50) + ']');
-                directClick(el);
+            if (bestBtn) {
+                log('   🎯 Найдена стрелка/кнопка рядом! Расстояние: ' + Math.round(bestDist) + 'px');
+                directClick(bestBtn);
                 await sleep(1500);
                 return true;
             }
+            
+            log('   ⚠️ Стрелка рядом с Подписки не найдена');
         }
         
         // СТРАТЕГИЯ 2: Ищем по aria-expanded (кнопка раскрытия dropdown)
         const toggleButtons = document.querySelectorAll('[aria-expanded]');
         for (const btn of toggleButtons) {
             const rect = btn.getBoundingClientRect();
-            if (rect.top > 250 || rect.width < 60) continue;
+            if (rect.top > 200 || rect.width < 30) continue;
             
             const text = (btn.textContent || '').trim();
             const lower = text.toLowerCase();
             
-            // Проверяем что это кнопка выбора ленты, а не другая
+            // Проверяем что это кнопка выбора ленты
             if (lower.includes('подписки') || lower.includes('following') || 
                 lower.includes('feed') || lower.includes('лента') ||
-                text.length < 50) { // Короткий текст — скорее всего заголовок ленты
-                log('   🎯 Найден toggle кнопка: [' + text.substring(0, 40) + ']');
+                text.length < 50) {
+                log('   🎯 Найден toggle (aria-expanded): [' + text.substring(0, 40) + ']');
                 directClick(btn);
                 await sleep(1500);
                 return true;
             }
         }
         
-        // СТРАТЕГИЯ 3: Ищем div/span с текстом ленты и кликаем на родителя-кнопку
-        const textElements = document.querySelectorAll('span, div, h1, h2, h3, p');
-        for (const el of textElements) {
-            const rect = el.getBoundingClientRect();
+        // СТРАТЕГИЯ 3: Ищем кнопки с иконками стрелок вверху страницы
+        const arrowButtons = document.querySelectorAll('button, [role="button"]');
+        for (const btn of arrowButtons) {
+            const rect = btn.getBoundingClientRect();
             if (rect.top > 200) continue;
             
-            const text = (el.textContent || '').trim();
-            const lower = text.toLowerCase();
+            const html = btn.innerHTML.toLowerCase();
+            const hasArrow = html.includes('chevron') || 
+                            html.includes('arrow') || 
+                            html.includes('caret') ||
+                            btn.getAttribute('aria-expanded') !== null;
             
-            if (lower === 'подписки' || lower === 'following' || lower === 'my activities') {
-                // Ищем ближайшего кликабельного родителя
-                let parent = el.parentElement;
-                let depth = 0;
-                while (parent && depth < 5) {
-                    if (parent.tagName === 'BUTTON' || 
-                        parent.getAttribute('role') === 'button' ||
-                        parent.onclick ||
-                        parent.getAttribute('onclick')) {
-                        log('   🎯 Найден родитель-кнопка для [' + text + ']');
-                        directClick(parent);
-                        await sleep(1500);
-                        return true;
-                    }
-                    parent = parent.parentElement;
-                    depth++;
-                }
-                
-                // Если не нашли кнопку-родителя, кликаем на сам элемент
-                // (иногда весь блок обернут в div с onclick)
-                log('   🎯 Кликаю на текст [' + text + '] (проверяю родителей)...');
-                directClick(el);
+            if (hasArrow && rect.width < 100 && rect.height < 100) {
+                log('   🎯 Найдена кнопка-стрелка');
+                directClick(btn);
                 await sleep(1500);
-                
-                // Проверяем, открылся ли dropdown
-                await sleep(500);
-                const dropdownCheck = document.querySelector('[role="menu"], [role="listbox"], [class*="dropdown" i]');
-                if (dropdownCheck) {
-                    return true;
-                }
+                return true;
             }
         }
         
-        log("❌ Dropdown выбора лент не найден. Возможно, нужно открыть его вручную.");
+        log("❌ Dropdown выбора лент не найден.");
         return false;
     }
     
