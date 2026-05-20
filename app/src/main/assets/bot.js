@@ -163,6 +163,7 @@
         window.scrollTo({ top: 0, behavior: 'auto' });
         await sleep(300);
         
+        // Пробуем нажать кнопку обновления если есть
         const refreshBtn = document.querySelector('button[data-testid*="refresh" i], [class*="refresh" i] button');
         if (refreshBtn) {
             refreshBtn.click();
@@ -171,11 +172,12 @@
             return;
         }
         
-        if (window.location.href.includes('/dashboard')) {
-            window.location.reload();
-            log("Страница обновлена");
-            await sleep(3000);
-        }
+        // Симулируем pull-to-refresh скроллом вверх
+        log("Pull-to-refresh: скролл вверх...");
+        window.scrollTo({ top: -200, behavior: 'smooth' });
+        await sleep(1500);
+        window.scrollTo({ top: 0, behavior: 'auto' });
+        await sleep(2000);
     }
 
     async function processVisibleButtons() {

@@ -78,6 +78,9 @@ class MainActivity : AppCompatActivity() {
                     if (!isBotRunning) {
                         btnToggle.isEnabled = true
                         btnToggle.alpha = 1.0f
+                    } else {
+                        // Авто-перезапуск бота после перезагрузки страницы
+                        restartBot()
                     }
                 } else {
                     tvStatus.text = "ОЖИДАНИЕ ВХОДА"
@@ -152,6 +155,19 @@ class MainActivity : AppCompatActivity() {
         touchOverlay.visibility = android.view.View.GONE
         tvStatus.text = "ОСТАНОВЛЕН"
         tvStatus.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
+    }
+
+    private fun restartBot() {
+        val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
+        val minMs = sharedPref.getInt("min_delay", 5000)
+        val maxMs = sharedPref.getInt("max_delay", 12000)
+        val strategy = sharedPref.getString("strategy", "smart") ?: "smart"
+        webView.evaluateJavascript("window.kudosMinDelay = $minMs; window.kudosMaxDelay = $maxMs; window.kudosStrategy = '$strategy';", null)
+        
+        val botScript = readAssetFile("bot.js")
+        if (botScript.isNotEmpty()) {
+            webView.evaluateJavascript(botScript, null)
+        }
     }
 
     private fun readAssetFile(fileName: String): String {
