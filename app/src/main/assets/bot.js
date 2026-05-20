@@ -41,112 +41,85 @@
     }
 
     function findKudosButtons() {
-        // Ищем кнопки лайков ПО ВСЕЙ СТРАНИЦЕ (не только внутри карточек)
-        // Тренировки могут иметь разную структуру, но кнопка лайка всегда имеет определенные признаки
+        // Ищем кнопки лайков ВНУТРИ карточек (проверенный подход)
         const result = [];
         const processed = new Set();
         
-        // ВСЕ кнопки на странице
-        const allButtons = document.querySelectorAll('button, [role="button"]');
+        const cards = document.querySelectorAll('[data-testid="web-feed-entry"], [data-testid="feed-entry"]');
         
-        for (const btn of allButtons) {
+        for (const card of cards) {
             try {
-                if (!btn || btn.disabled) continue;
-                if (processed.has(btn)) continue;
-                processed.add(btn);
-                
-                const testId = btn.getAttribute('data-testid') || '';
-                const aria = (btn.getAttribute('aria-label') || '').toLowerCase().trim();
-                const cls = (btn.className || '').toLowerCase();
-                const text = (btn.textContent || '').toLowerCase().trim();
-                const rect = btn.getBoundingClientRect();
-                
-                // Пропускаем кнопки без размера или слишком большие
-                if (rect.width === 0 || rect.height === 0) continue;
-                if (rect.width > 150 || rect.height > 100) continue;
-                
-                // Проверяем является ли кнопка лайком
-                let isKudos = false;
-                let reason = '';
-                
-                // 1. data-testid содержит "kudos" (самый надежный)
-                if (testId.includes('kudos')) {
-                    isKudos = true;
-                    reason = 'data-testid=' + testId;
-                }
-                // 2. aria-label содержит "kudos" 
-                else if (aria.includes('kudos') && !/\d/.test(aria) && !aria.includes('view') && !aria.includes('people')) {
-                    isKudos = true;
-                    reason = 'aria=' + aria;
-                }
-                // 3. Класс содержит "kudos"
-                else if (cls.includes('kudos') || cls.includes('like')) {
-                    isKudos = true;
-                    reason = 'class=' + cls.substring(0, 30);
-                }
-                // 4. SVG иконка в маленькой кнопке без текста (44x44 типично для Strava)
-                else if (rect.width >= 30 && rect.width <= 60 && rect.height >= 30 && rect.height <= 60 && !text) {
-                    const svg = btn.querySelector('svg');
-                    if (svg) {
-                        const svgHtml = svg.innerHTML.toLowerCase();
-                        if (svgHtml.includes('path') || svgHtml.includes('heart') || svgHtml.includes('thumb')) {
-                            isKudos = true;
-                            reason = 'svg(' + Math.round(rect.width) + 'x' + Math.round(rect.height) + ')';
+                const buttons = card.querySelectorAll('button, [role="button"]');
+                for (const btn of buttons) {
+                    if (processed.has(btn)) continue;
+                    processed.add(btn);
+                    
+                    const testId = btn.getAttribute('data-testid') || '';
+                    const aria = (btn.getAttribute('aria-label') || '').toLowerCase().trim();
+                    const cls = (btn.className || '').toLowerCase();
+                    const text = (btn.textContent || '').toLowerCase().trim();
+                    const rect = btn.getBoundingClientRect();
+                    
+                    // Пропускаем кнопки без размера или слишком большие
+                    if (rect.width === 0 || rect.height === 0) continue;
+                    if (rect.width > 200 || rect.height > 100) continue;
+                    
+                    let isKudos = false;
+                    
+                    // data-testid содержит "kudos"
+                    if (testId.includes('kudos')) {
+                        isKudos = true;
+                    }
+                    // aria-label содержит "kudos"
+                    else if (aria.includes('kudos') && !/\d/.test(aria) && !aria.includes('view')) {
+                        isKudos = true;
+                    }
+                    // SVG иконка в маленькой кнопке
+                    else if (rect.width <= 60 && rect.height <= 60 && !text) {
+                        const svg = btn.querySelector('svg');
+                        if (svg) {
+                            const svgHtml = svg.innerHTML.toLowerCase();
+                            if (svgHtml.includes('heart') || svgHtml.includes('thumb')) {
+                                isKudos = true;
+                            }
                         }
                     }
-                }
-                
-                if (!isKudos) continue;
-                
-                // ❌ ИСКЛЮЧАЕМ popup и ложные срабатывания
-                // Исключаем если aria-label содержит цифры — "5 kudos"
-                if (/\d/.test(aria)) {
-                    continue;
-                }
-                // Исключаем если содержит текст popup
-                if (text.includes('people') || text.includes('liked this') || text.includes('view')) {
-                    continue;
-                }
-                
-                // Проверяем не лайкнут ли уже
-                const isLiked = (testId === 'un-kudos_button') || 
-                                 aria.includes('remove') ||
-                                 aria.includes('un-kudos') ||
-                                 cls.includes('active') ||
-                                 cls.includes('selected') ||
-                                 text.includes('liked') ||
-                                 text.includes('лайкнуто') ||
-                                 (btn.querySelector('svg')?.getAttribute('fill') === '#fc5200');
-                
-                if (!isLiked) {
-                    const actId = getActivityId(btn);
-                    if (actId && window.likedActivities.has(actId)) continue;
-                    result.push({btn, actId});
+                    
+                    if (!isKudos) continue;
+                    
+                    // Исключаем popup с числами
+                    if (/\d/.test(aria)) continue;
+                    if (text.includes('people') || text.includes('liked this')) continue;
+                    
+                    // Проверяем не лайкнут ли уже
+                    const isLiked = testId.includes('un-kudos') || 
+                                     cls.includes('liked') ||
+                                     cls.includes('active') ||
+                                     (btn.querySelector('svg')?.getAttribute('fill') === '#fc5200');
+                    
+                    if (!isLiked) {
+                        const actId = getActivityId(btn);
+                        if (actId && window.likedActivities.has(actId)) continue;
+                        result.push({btn, actId});
+                    }
                 }
             } catch(e) {}
         }
         
-        log('Найдено кнопок лайков: ' + result.length);
         return result;
     }
 
     function getActivityId(btn) {
         try {
-            // Ищем карточку более широко
             const card = btn.closest('[data-testid="web-feed-entry"]') || 
-                        btn.closest('[data-testid="feed-entry"]') ||
-                        btn.closest('.activity') || 
-                        btn.closest('article') ||
-                        btn.closest('[class*="activity" i]') ||
-                        btn.closest('[class*="feed-entry" i]') ||
-                        btn.closest('[class*="card" i]');
+                        btn.closest('[data-testid="feed-entry"]');
             if (!card) return null;
             const link = card.querySelector('a[href*="/activities/"]');
             if (link) {
                 const match = link.href.match(/\/activities\/(\d+)/);
                 if (match) return match[1];
             }
-            return card.getAttribute('data-testid') || card.id || card.className;
+            return card.getAttribute('data-testid') || card.id;
         } catch(e) { return null; }
     }
 
@@ -543,7 +516,7 @@
         let scrollAttempts = 0;
         let lastY = window.scrollY;
         const maxScrolls = 50;
-        const processedButtons = new WeakSet(); // DOM элементы — уникальны по ссылке
+        const processedCards = new WeakSet();
         
         log('Начинаю лайкать тренировки в клубе...');
         
@@ -552,48 +525,68 @@
         await sleep(2000);
         
         while (scrollAttempts < maxScrolls && !window.kudosBotShouldStop) {
-            // Находим ВСЕ кнопки лайков на странице
-            const allButtons = findKudosButtons();
-            log('Всего кнопок лайков на странице: ' + allButtons.length);
+            // Находим все карточки активностей
+            const cards = document.querySelectorAll('[data-testid="web-feed-entry"], [data-testid="feed-entry"]');
+            log('Найдено карточек: ' + cards.length);
             
-            // Фильтруем — оставляем только необработанные DOM-элементы
-            const newButtons = allButtons.filter(item => {
-                if (processedButtons.has(item.btn)) return false;
-                return true;
-            });
+            let processedCount = 0;
             
-            log('Новых (необработанных) кнопок: ' + newButtons.length);
-            
-            if (newButtons.length === 0) {
-                // Нет новых кнопок — прокручиваем вниз
-                log('Нет новых кнопок, прокручиваю вниз...');
-                window.scrollBy({ top: 500, behavior: 'auto' });
-                await sleep(4000);
-                scrollAttempts++;
-                
-                if (window.scrollY === lastY) {
-                    log('Конец ленты (скролл не изменился)');
-                    break;
-                }
-                lastY = window.scrollY;
-                continue;
-            }
-            
-            // Обрабатываем каждую новую кнопку ИНДИВИДУАЛЬНО
-            let likedInCycle = 0;
-            
-            for (const item of newButtons) {
+            for (const card of cards) {
                 if (window.kudosBotShouldStop) break;
+                if (processedCards.has(card)) {
+                    processedCount++;
+                    continue;
+                }
+                processedCards.add(card);
                 
-                const btn = item.btn;
-                const actId = item.actId;
-                
-                // Отмечаем как обработанную (DOM-элемент уникален по ссылке)
-                processedButtons.add(btn);
-                
-                // Скроллим к кнопке (она может быть вне экрана)
-                btn.scrollIntoView({ behavior: 'auto', block: 'center' });
+                // Скроллим к карточке
+                card.scrollIntoView({ behavior: 'auto', block: 'center' });
                 await sleep(1500);
+                
+                // Находим кнопку лайка ВНУТРИ этой карточки
+                const buttons = card.querySelectorAll('button');
+                let kudosBtn = null;
+                
+                for (const btn of buttons) {
+                    const testId = btn.getAttribute('data-testid') || '';
+                    const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
+                    const cls = (btn.className || '').toLowerCase();
+                    const text = (btn.textContent || '').toLowerCase().trim();
+                    const rect = btn.getBoundingClientRect();
+                    
+                    // Пропускаем кнопки без размера или слишком большие
+                    if (rect.width === 0 || rect.height === 0) continue;
+                    if (rect.width > 200 || rect.height > 100) continue;
+                    
+                    // Проверяем является ли кнопка лайком
+                    let isKudos = false;
+                    if (testId.includes('kudos')) isKudos = true;
+                    else if (aria.includes('kudos') && !/\d/.test(aria)) isKudos = true;
+                    else if (rect.width <= 60 && rect.height <= 60 && !text) {
+                        const svg = btn.querySelector('svg');
+                        if (svg && (svg.innerHTML.toLowerCase().includes('heart') || svg.innerHTML.toLowerCase().includes('thumb'))) {
+                            isKudos = true;
+                        }
+                    }
+                    
+                    if (!isKudos) continue;
+                    
+                    // Проверяем не лайкнут ли уже
+                    const isLiked = testId.includes('un-kudos') || 
+                                     cls.includes('liked') ||
+                                     cls.includes('active') ||
+                                     (btn.querySelector('svg')?.getAttribute('fill') === '#fc5200');
+                    
+                    if (!isLiked) {
+                        kudosBtn = btn;
+                        break;
+                    }
+                }
+                
+                if (!kudosBtn) {
+                    log('  В карточке нет кнопки лайка (уже лайкнуто?)');
+                    continue;
+                }
                 
                 // Проверяем URL
                 if (!window.location.pathname.includes('/clubs/')) {
@@ -603,7 +596,7 @@
                     return totalLiked;
                 }
                 
-                const athlete = findAthleteName(btn);
+                const athlete = findAthleteNameFromCard(card);
                 log('Лайкаю: ' + athlete);
                 
                 // Пауза перед кликом
@@ -620,18 +613,18 @@
                 // Кликаем
                 let clicked = false;
                 try {
-                    simulateClick(btn);
+                    simulateClick(kudosBtn);
                     clicked = true;
                 } catch(e) {
-                    try { btn.click(); clicked = true; } catch(e2) {}
+                    try { kudosBtn.click(); clicked = true; } catch(e2) {}
                 }
-                if (!clicked) clicked = safeClick(btn);
+                if (!clicked) clicked = safeClick(kudosBtn);
                 
                 if (clicked) {
+                    const actId = getActivityIdFromCard(card);
                     if (actId) window.likedActivities.add(actId);
                     log('✅ Лайк: ' + athlete);
                     updateStats(athlete);
-                    likedInCycle++;
                     totalLiked++;
                     await sleep(2000);
                 } else {
@@ -639,143 +632,45 @@
                 }
             }
             
-            log('Лайкнуто в цикле: ' + likedInCycle + ', всего: ' + totalLiked);
+            log('Обработано карточек: ' + processedCount + '/' + cards.length + ', лайкнуто: ' + totalLiked);
             
-            // После обработки всех кнопок — прокручиваем вниз для новых
-            log('Прокручиваю вниз для загрузки новых тренировок...');
-            window.scrollBy({ top: 500, behavior: 'auto' });
-            await sleep(4000);
-            scrollAttempts++;
-            
-            if (window.scrollY === lastY) {
-                log('Конец ленты');
-                break;
+            // Если все карточки на экране обработаны — прокручиваем вниз
+            if (processedCount >= cards.length) {
+                log('Все видимые карточки обработаны, прокручиваю вниз...');
+                window.scrollBy({ top: 800, behavior: 'auto' });
+                await sleep(5000);
+                scrollAttempts++;
+                
+                if (window.scrollY === lastY) {
+                    log('Конец ленты');
+                    break;
+                }
+                lastY = window.scrollY;
             }
-            lastY = window.scrollY;
         }
         
         log('Всего лайкнуто в клубе: ' + totalLiked);
         return totalLiked;
     }
-        
-        while (scrollAttempts < maxScrolls && !window.kudosBotShouldStop) {
-            // Лайкаем видимые
-            const buttons = findKudosButtons();
-            log('Найдено кнопок лайков: ' + buttons.length);
-            let likedInCycle = 0;
-            let skippedInCycle = 0;
-            
-            for (let i = 0; i < buttons.length; i++) {
-                const item = buttons[i];
-                const btn = item.btn;
-                const actId = item.actId;
-                if (window.kudosBotShouldStop) break;
-                
-                // Пропускаем если уже обрабатывали в этой сессии (для предотвращения дублирования)
-                if (actId && processedThisSession.has(actId)) {
-                    skippedInCycle++;
-                    continue;
-                }
-                
-                // Проверяем что элемент в пределах экрана
-                const btnRect = btn.getBoundingClientRect();
-                if (btnRect.width === 0 || btnRect.height === 0) continue;
-                
-                // Если кнопка ниже экрана — скроллим к ней
-                if (btnRect.top > window.innerHeight - 100) {
-                    log('  Скроллю к кнопке (y=' + Math.round(btnRect.top) + ')');
-                    btn.scrollIntoView({ behavior: 'auto', block: 'center' });
-                    await sleep(800);
-                }
-                // Если кнопка выше экрана — скроллим вверх
-                else if (btnRect.bottom < 100) {
-                    log('  Скроллю к кнопке вверх (y=' + Math.round(btnRect.top) + ')');
-                    btn.scrollIntoView({ behavior: 'auto', block: 'center' });
-                    await sleep(800);
-                }
-                
-                const athlete = findAthleteName(btn);
-                
-                // Проверяем что кнопка — не ссылка на профиль (это могло случиться при ошибке поиска)
-                if (btn.tagName === 'A' && btn.getAttribute('href') && btn.getAttribute('href').includes('/athletes/')) {
-                    log('Пропускаю ссылку на профиль: ' + athlete);
-                    continue;
-                }
-                
-                log('Лайкаю: ' + athlete + ' (кнопка: ' + Math.round(btnRect.left) + ',' + Math.round(btnRect.top) + ')');
-                
-                const min = window.kudosMinDelay || 3000;
-                const max = window.kudosMaxDelay || 8000;
-                const delay = Math.floor(Math.random() * Math.max(0, max - min)) + min;
-                if (delay > 500) {
-                    log('Пауза ' + (delay/1000).toFixed(1) + 'с...');
-                    await sleep(delay);
-                }
-                
-                if (window.kudosBotShouldStop) break;
-                
-                // Пробуем кликнуть — сначала simulateClick, потом safeClick
-                let clicked = false;
-                try {
-                    simulateClick(btn);
-                    clicked = true;
-                } catch(e) {
-                    try {
-                        btn.click();
-                        clicked = true;
-                    } catch(e2) {}
-                }
-                
-                if (!clicked) {
-                    clicked = safeClick(btn);
-                }
-                
-                if (clicked) {
-                    if (actId) {
-                        window.likedActivities.add(actId);
-                        processedThisSession.add(actId); // Отмечаем что обработали
-                    }
-                    log('✅ Лайк: ' + athlete);
-                    updateStats(athlete);
-                    likedInCycle++;
-                    totalLiked++;
-                    await sleep(2000); // Ждем обновления DOM (кнопка меняет состояние)
-                } else {
-                    log('❌ Не удалось кликнуть на лайк');
-                }
-                
-                // Проверяем что мы всё ещё на странице клуба (не перешли на профиль случайно)
-                if (!window.location.pathname.includes('/clubs/') || !window.location.pathname.includes('/recent_activity')) {
-                    log('⚠️ URL изменился после клика: ' + window.location.pathname + ', возвращаюсь...');
-                    // Возвращаемся назад
-                    try { window.history.back(); } catch(e) {}
-                    await sleep(3000);
-                    // Если не вернулись — прямой переход
-                    if (!window.location.pathname.includes('/clubs/')) {
-                        window.location.href = 'https://www.strava.com' + clubUrl + '/recent_activity';
-                        await sleep(5000);
-                        return totalLiked;
-                    }
-                }
+    
+    function findAthleteNameFromCard(card) {
+        try {
+            const nameEl = card.querySelector('[data-testid="owners-name"]') || 
+                          card.querySelector('a[href*="/athletes/"]') ||
+                          card.querySelector('strong a');
+            return nameEl ? nameEl.textContent.trim().substring(0, 25) : "Неизвестный";
+        } catch(e) { return "Неизвестный"; }
+    }
+    
+    function getActivityIdFromCard(card) {
+        try {
+            const link = card.querySelector('a[href*="/activities/"]');
+            if (link) {
+                const match = link.href.match(/\/activities\/(\d+)/);
+                if (match) return match[1];
             }
-            
-            log('Лайкнуто в цикле: ' + likedInCycle + ', пропущено (дубли): ' + skippedInCycle + ', всего: ' + totalLiked);
-            
-            // Прокручиваем постепенно — маленький шаг чтобы не пропустить
-            window.scrollBy({ top: 400, behavior: 'auto' });
-            await sleep(5000);
-            scrollAttempts++;
-            
-            // Проверяем, изменился ли скролл
-            if (window.scrollY === lastY) {
-                log('Конец ленты в клубе (скролл не изменился)');
-                break;
-            }
-            lastY = window.scrollY;
-        }
-        
-        log('Всего лайкнуто в клубе: ' + totalLiked);
-        return totalLiked;
+            return card.getAttribute('data-testid') || card.id;
+        } catch(e) { return null; }
     }
     
     // ====== НАВИГАЦИЯ ПО ЛЕНТАМ ======
