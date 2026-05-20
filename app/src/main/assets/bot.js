@@ -237,66 +237,114 @@
     }
     
     function clickSandwichMenu() {
-        log('Открываю меню навигации (гамбургер)...');
+        log('Ищу кнопку меню навигации (гамбургер)...');
         
-        const selectors = [
-            'button[aria-label*="menu" i]',
-            'button[aria-label*="Menu" i]',
-            'button[aria-label*="меню" i]',
-            'button[aria-label*="Меню" i]',
-            'button[aria-label*="navigation" i]',
-            'button[aria-label*="Navigation" i]',
-            '[data-testid="nav-menu-toggle"]',
-            '[data-testid="menu-toggle"]',
-            '.nav-menu-toggle',
-            '.menu-toggle',
-            '[class*="menu-toggle"]',
-            '[class*="hamburger"]',
-            '[class*="nav-toggle"]',
-            'header button:first-of-type'
+        // Стратегия 1: Ищем по aria-label (точное совпадение)
+        const ariaSelectors = [
+            'button[aria-label="Open menu" i]',
+            'button[aria-label="Menu" i]',
+            'button[aria-label="Navigation menu" i]',
+            'button[aria-label="Toggle navigation" i]',
+            'button[aria-label="Open navigation" i]',
+            'button[aria-label="Open" i]',
+            'button[aria-label="Toggle menu" i]',
+            'button[aria-label="Open main menu" i]',
+            'button[aria-label="Navigation" i]',
+            'button[aria-label="Nav" i]'
         ];
         
-        for (const sel of selectors) {
+        for (const sel of ariaSelectors) {
             const el = document.querySelector(sel);
             if (el) {
                 const clickable = findClickableParent(el) || el;
-                log('Нашел кнопку меню: ' + sel + ', кликаю...');
+                log('Нашел кнопку меню по aria-label: ' + sel);
                 simulateClick(clickable);
                 return true;
             }
         }
         
-        // Fallback: ищем по SVG с тремя линиями
+        // Стратегия 2: Ищем по data-testid
+        const testIds = ['nav-menu-toggle', 'menu-toggle', 'mobile-menu-toggle', 'header-menu'];
+        for (const tid of testIds) {
+            const el = document.querySelector('[data-testid="' + tid + '"]');
+            if (el) {
+                const clickable = findClickableParent(el) || el;
+                log('Нашел кнопку меню по data-testid: ' + tid);
+                simulateClick(clickable);
+                return true;
+            }
+        }
+        
+        // Стратегия 3: Ищем по классу (только если есть слова menu/nav/hamburger)
         const buttons = document.querySelectorAll('button, [role="button"]');
+        for (const btn of buttons) {
+            const cls = (btn.className || '').toLowerCase();
+            if (cls.includes('menu') || cls.includes('nav') || cls.includes('hamburger') || cls.includes('toggle')) {
+                log('Нашел кнопку меню по классу: ' + btn.className.substring(0, 50));
+                simulateClick(btn);
+                return true;
+            }
+        }
+        
+        // Стратегия 4: Ищем по SVG с тремя линиями (hamburger icon)
         for (const btn of buttons) {
             const svg = btn.querySelector('svg');
             if (svg) {
                 const svgContent = svg.innerHTML || '';
-                if (svgContent.includes('M3') || svgContent.includes('M4') ||
-                    svgContent.toLowerCase().includes('menu')) {
-                    log('Нашел кнопку меню по SVG');
+                const pathCount = svg.querySelectorAll('path, line, rect').length;
+                // Hamburger icon обычно имеет 3 линии или специфичные path
+                if ((pathCount >= 2 && pathCount <= 4) ||
+                    svgContent.toLowerCase().includes('menu') ||
+                    svgContent.includes('M3') || svgContent.includes('M4') ||
+                    svgContent.includes('hamburger')) {
+                    log('Нашел кнопку меню по SVG (hamburger icon)');
                     simulateClick(btn);
                     return true;
                 }
             }
         }
         
-        log('Не удалось найти кнопку меню');
+        log('Не удалось найти кнопку меню навигации');
         return false;
     }
     
     function clickMenuItemByText(texts) {
-        const allElements = document.querySelectorAll('a, button, [role="menuitem"], li, span, div');
-        for (const el of allElements) {
+        // Ищем внутри открытого меню (sidebar/drawer)
+        // Сначала пробуем найти элементы внутри меню
+        const menuContainers = document.querySelectorAll('[role="menu"], [role="dialog"], [class*="sidebar" i], [class*="drawer" i], [class*="navigation" i], nav, aside');
+        const elementsToSearch = menuContainers.length > 0 ? 
+            Array.from(menuContainers).flatMap(c => Array.from(c.querySelectorAll('a, button, [role="menuitem"], li, span'))) :
+            Array.from(document.querySelectorAll('a, button, [role="menuitem"], li, span, div'));
+        
+        // Ищем точное совпадение
+        for (const el of elementsToSearch) {
             const text = el.textContent.trim();
+            // Проверяем что элемент видим
+            const rect = el.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) continue;
+            
             for (const search of texts) {
-                if (text === search || text.toLowerCase().includes(search.toLowerCase())) {
+                const searchLower = search.toLowerCase();
+                const textLower = text.toLowerCase();
+                // Точное совпадение или начинается с искомого слова (для избежания "Спортсмены" = "Клубы")
+                if (textLower === searchLower || 
+                    textLower.startsWith(searchLower + ' ') ||
+                    textLower.startsWith(searchLower + '\n')) {
                     log('Кликаю пункт меню: [' + text + ']');
                     simulateClick(el);
                     return true;
                 }
             }
         }
+        
+        // Fallback: ищем по href содержащему /clubs/
+        const clubLinks = document.querySelectorAll('a[href*="/clubs/"], a[href="/clubs"], a[href="/clubs/search"]');
+        for (const link of clubLinks) {
+            log('Кликаю ссылку на Клубы по href: ' + link.getAttribute('href'));
+            simulateClick(link);
+            return true;
+        }
+        
         return false;
     }
     
@@ -366,12 +414,48 @@
     
     function isTabActive(tab) {
         if (!tab) return false;
-        return tab.getAttribute('aria-selected') === 'true' ||
-               tab.classList.contains('active') ||
-               tab.classList.contains('selected') ||
-               tab.getAttribute('aria-current') === 'page' ||
-               tab.getAttribute('aria-current') === 'true' ||
-               tab.classList.contains('current');
+        
+        // Проверяем классические признаки активности
+        const ariaSelected = tab.getAttribute('aria-selected') === 'true';
+        const isActive = tab.classList.contains('active') || 
+                         tab.classList.contains('selected') || 
+                         tab.classList.contains('current');
+        const ariaCurrent = tab.getAttribute('aria-current') === 'page' || 
+                            tab.getAttribute('aria-current') === 'true';
+        
+        // Проверяем URL — если href вкладки совпадает с текущим URL
+        const href = tab.getAttribute('href') || '';
+        const currentPath = window.location.pathname;
+        const isUrlMatch = href && (
+            currentPath === href || 
+            currentPath.includes(href.replace(/^\//, '')) ||
+            href.includes('recent_activity') && currentPath.includes('recent_activity') ||
+            href.includes('activity') && currentPath.includes('activity')
+        );
+        
+        // Проверяем стили — активная вкладка может иметь border-bottom, font-weight и т.д.
+        const style = window.getComputedStyle(tab);
+        const hasActiveStyle = style.borderBottomWidth !== '0px' || 
+                               style.fontWeight === 'bold' || 
+                               style.fontWeight === '700' ||
+                               parseInt(style.fontWeight) >= 600;
+        
+        // Проверяем data-атрибуты
+        const dataActive = tab.getAttribute('data-active') === 'true' ||
+                          tab.getAttribute('data-selected') === 'true';
+        
+        const result = ariaSelected || isActive || ariaCurrent || isUrlMatch || hasActiveStyle || dataActive;
+        
+        if (result) {
+            log('Вкладка активна (aria=' + ariaSelected + ', class=' + isActive + ', url=' + isUrlMatch + ', style=' + hasActiveStyle + ', data=' + dataActive + ')');
+        }
+        
+        return result;
+    }
+    
+    function hasActivityFeed() {
+        const activities = document.querySelectorAll('[data-testid="web-feed-entry"], [data-testid="feed-entry"], .activity, .entity-details, .activity-card, [class*="activity" i]');
+        return activities.length > 0;
     }
     
     function goToNextClub() {
@@ -882,16 +966,33 @@
         // === ФАЗА 1: Нужно открыть меню и перейти в Клубы ===
         if (!url.startsWith('/clubs')) {
             log('Открываю меню навигации...');
-            if (clickSandwichMenu()) {
-                await sleep(2500);
+            const menuOpened = clickSandwichMenu();
+            if (menuOpened) {
+                await sleep(3000);
+                
+                // Проверяем, открылось ли меню (ищем пункты меню на странице)
+                const menuItems = document.querySelectorAll('[role="menuitem"], nav a, aside a, [class*="sidebar"] a, [class*="drawer"] a');
+                log('Найдено пунктов меню на странице: ' + menuItems.length);
                 
                 // Пробуем найти и кликнуть "Клубы" в меню
                 const menuTexts = ['Клубы', 'Clubs', 'Мои клубы', 'My Clubs', 'Your Clubs'];
                 if (clickMenuItemByText(menuTexts)) {
-                    log('Переходу в Клубы...');
+                    log('Кликнул на пункт Клубы, жду перехода...');
                     await sleep(5000);
-                    return; // Страница перезагрузится, бот рестартанет
+                    
+                    // Проверяем, изменился ли URL
+                    if (window.location.pathname.startsWith('/clubs')) {
+                        log('Успешно перешел в Клубы!');
+                        // URL изменился, бот будет перезапущен автоматически
+                        return;
+                    } else {
+                        log('URL не изменился после клика, пробую прямой переход');
+                    }
+                } else {
+                    log('Не удалось найти пункт "Клубы" в меню');
                 }
+            } else {
+                log('Не удалось открыть меню навигации');
             }
             
             // Fallback: прямой переход
@@ -1017,24 +1118,31 @@
                 localStorage.setItem('sk_visited', JSON.stringify(visited));
             }
             
-            // Ищем и кликаем вкладку активности
-            const tab = findActivityTab();
-            if (tab && !isTabActive(tab)) {
-                log('Кликаю на вкладку активности');
-                simulateClick(tab);
-                await sleep(4000);
-                return;
-            }
-            
-            if (!tab) {
-                log('Вкладка активности не найдена, прокручиваю...');
-                window.scrollBy({ top: 300, behavior: 'auto' });
-                await sleep(2000);
-                const tabAgain = findActivityTab();
-                if (tabAgain && !isTabActive(tabAgain)) {
-                    simulateClick(tabAgain);
-                    await sleep(4000);
+            // Проверяем, есть ли уже лента тренировок
+            if (hasActivityFeed()) {
+                log('Лента тренировок уже загружена');
+            } else {
+                // Ищем и кликаем вкладку активности
+                const tab = findActivityTab();
+                if (tab && !isTabActive(tab)) {
+                    log('Кликаю на вкладку активности');
+                    simulateClick(tab);
+                    await sleep(5000);
+                    // После клика страница обновится, бот будет рестартован MainActivity
+                    // При рестарте hasActivityFeed() вернет true и бот перейдет к лайканию
                     return;
+                }
+                
+                if (!tab) {
+                    log('Вкладка активности не найдена, прокручиваю...');
+                    window.scrollBy({ top: 300, behavior: 'auto' });
+                    await sleep(2000);
+                    const tabAgain = findActivityTab();
+                    if (tabAgain && !isTabActive(tabAgain)) {
+                        simulateClick(tabAgain);
+                        await sleep(5000);
+                        return;
+                    }
                 }
             }
             
