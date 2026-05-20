@@ -234,52 +234,134 @@
     }
     
     async function clickFeedSelector() {
-        // Стратегия 1: Ищем элемент с текстом "Подписки" или "Following" вверху
-        const feeds = getPageFeeds();
+        log("🔍 Ищу селектор лент (стрелку рядом с Подписки)...");
         
-        for (const feed of feeds) {
-            const text = feed.text.toLowerCase();
-            if (text === 'following' || text === 'подписки' || 
-                text === 'my clubs' || text === 'мои группы') {
-                log(`🎯 Найден селектор лент: "${feed.text}"`);
-                directClick(feed.el);
-                await sleep(1500); // Ждем открытия dropdown
+        // СТРАТЕГИЯ 1: Ищем кнопку-стрелку РЯДОМ с текстом "Подписки"
+        // Сначала найдем текст "Подписки" или "Following"
+        const allElements = document.querySelectorAll('span, div, button, a, h1, h2, h3');
+        let feedLabelEl = null;
+        
+        for (const el of allElements) {
+            const text = (el.textContent || '').trim().toLowerCase();
+            if (text === 'подписки' || text === 'following' || text === 'feeds') {
+                const rect = el.getBoundingClientRect();
+                if (rect.top < 200) {
+                    feedLabelEl = el;
+                    log(`   📌 Найден текст ленты: "${el.textContent.trim()}" на позиции top=${Math.round(rect.top)}`);
+                    break;
+                }
+            }
+        }
+        
+        if (feedLabelEl) {
+            // Ищем кнопку-стрелку РЯДОМ с этим текстом (справа или в том же контейнере)
+            const labelRect = feedLabelEl.getBoundingClientRect();
+            const labelCenterX = labelRect.left + labelRect.width / 2;
+            const labelCenterY = labelRect.top + labelRect.height / 2;
+            
+            // Ищем ближайшую кнопку/иконку справа
+            const nearbyElements = document.querySelectorAll('button, svg, i, [class*="icon" i], [class*="arrow" i], [class*="chevron" i]');
+            let closestBtn = null;
+            let closestDist = Infinity;
+            
+            for (const btn of nearbyElements) {
+                const rect = btn.getBoundingClientRect();
+                // Должен быть справа от текста и на той же высоте
+                const btnCenterX = rect.left + rect.width / 2;
+                const btnCenterY = rect.top + rect.height / 2;
+                
+                const dist = Math.sqrt(
+                    Math.pow(btnCenterX - labelCenterX, 2) + 
+                    Math.pow(btnCenterY - labelCenterY, 2)
+                );
+                
+                // Должен быть справа (x больше) и близко по Y
+                if (btnCenterX > labelCenterX && 
+                    Math.abs(btnCenterY - labelCenterY) < 50 &&
+                    dist < 200 &&
+                    dist < closestDist) {
+                    closestDist = dist;
+                    closestBtn = btn;
+                }
+            }
+            
+            if (closestBtn) {
+                const btnRect = closestBtn.getBoundingClientRect();
+                log(`   🎯 Найдена стрелка/кнопка рядом! Расстояние: ${Math.round(closestDist)}px`);
+                directClick(closestBtn);
+                await sleep(1500);
+                return true;
+            }
+            
+            // Если не нашли стрелку — пробуем кликнуть на родительский контейнер
+            const parent = feedLabelEl.parentElement;
+            if (parent && (parent.tagName === 'BUTTON' || parent.onclick || parent.getAttribute('role') === 'button')) {
+                log(`   🎯 Кликаю на родителя текста ленты`);
+                directClick(parent);
+                await sleep(1500);
+                return true;
+            }
+            
+            // Пробуем кликнуть на сам текст (иногда весь блок кликабельный)
+            log(`   🎯 Кликаю на текст ленты (fallback)`);
+            directClick(feedLabelEl);
+            await sleep(1500);
+            return true;
+        }
+        
+        // СТРАТЕГИЯ 2: Ищем любые кнопки с иконками стрелок вверху страницы
+        const arrowButtons = document.querySelectorAll('button, [role="button"]');
+        for (const btn of arrowButtons) {
+            const rect = btn.getBoundingClientRect();
+            if (rect.top > 200) continue;
+            
+            const html = btn.innerHTML.toLowerCase();
+            const hasArrow = html.includes('chevron') || 
+                            html.includes('arrow') || 
+                            html.includes('▼') || 
+                            html.includes('▾') ||
+                            html.includes('caret') ||
+                            btn.getAttribute('aria-expanded') !== null;
+            
+            if (hasArrow && rect.width < 60 && rect.height < 60) {
+                log(`   🎯 Найдена кнопка-стрелка`);
+                directClick(btn);
+                await sleep(1500);
                 return true;
             }
         }
         
-        // Стратегия 2: Ищем по data-testid
+        // СТРАТЕГИЯ 3: Ищем aria-expanded
+        const toggleButtons = document.querySelectorAll('[aria-expanded]');
+        for (const btn of toggleButtons) {
+            const rect = btn.getBoundingClientRect();
+            if (rect.top < 200) {
+                log(`   🎯 Найден toggle (aria-expanded)`);
+                directClick(btn);
+                await sleep(1500);
+                return true;
+            }
+        }
+        
+        // СТРАТЕГИЯ 4: Просто ищем кнопки с data-testid
         const selectors = [
             '[data-testid="feed-selector-toggle"]',
             '[data-testid="feed-dropdown"]',
             '[data-testid="club-selector"]',
             '[class*="feed-selector" i]',
             '[class*="dropdown-toggle" i]',
-            'button[class*="dropdown" i]',
         ];
         
         for (const sel of selectors) {
             try {
                 const el = document.querySelector(sel);
                 if (el) {
-                    log(`🎯 Найден селектор по CSS: ${sel}`);
+                    log(`   🎯 Найден селектор по CSS: ${sel}`);
                     directClick(el);
                     await sleep(1500);
                     return true;
                 }
             } catch(e) {}
-        }
-        
-        // Стратегия 3: Ищем aria-expanded или aria-haspopup
-        const toggleButtons = document.querySelectorAll('[aria-expanded], [aria-haspopup="true"]');
-        for (const btn of toggleButtons) {
-            const rect = btn.getBoundingClientRect();
-            if (rect.top < 200 && rect.width > 80) {
-                log(`🎯 Найден toggle button (aria)`);
-                directClick(btn);
-                await sleep(1500);
-                return true;
-            }
         }
         
         log("❌ Селектор лент не найден");
@@ -289,64 +371,113 @@
     function getFeedOptions() {
         const options = [];
         
-        // Ищем открытый dropdown/menu
+        // Ищем открытый dropdown/menu - очень широкий поиск
         const menuSelectors = [
             '[role="menu"]',
             '[role="listbox"]',
             '[class*="dropdown-menu" i]',
             '[class*="menu-list" i]',
+            '[class*="dropdown" i]',
+            '[class*="popover" i]',
+            '[class*="overlay" i]',
             '[data-testid*="menu" i]',
             '[data-testid*="dropdown" i]',
+            '[data-testid*="popover" i]',
+            'ul[class]',
+            'div[class*="menu" i]',
+            'div[class*="list" i]',
         ];
         
         let menuEl = null;
         for (const sel of menuSelectors) {
             try {
-                const el = document.querySelector(sel);
-                if (el) {
+                const elements = document.querySelectorAll(sel);
+                for (const el of elements) {
                     const style = window.getComputedStyle(el);
-                    if (style.display !== 'none' && style.visibility !== 'hidden') {
-                        menuEl = el;
-                        break;
+                    // Элемент должен быть видимым и иметь дочерние элементы
+                    if (style.display !== 'none' && style.visibility !== 'hidden' && el.children.length > 0) {
+                        // Проверяем что это dropdown а не случайный элемент
+                        const rect = el.getBoundingClientRect();
+                        if (rect.width > 100 && rect.height > 50) {
+                            menuEl = el;
+                            log(`📂 Найден dropdown контейнер: ${sel}, дочерних: ${el.children.length}`);
+                            break;
+                        }
                     }
                 }
+                if (menuEl) break;
             } catch(e) {}
         }
         
-        // Если нашли открытое меню, ищем опции внутри
+        // Если нашли контейнер, собираем ВСЕ элементы внутри
         if (menuEl) {
-            const items = menuEl.querySelectorAll('[role="menuitem"], [role="option"], a, li, button');
-            for (const item of items) {
-                const text = (item.textContent || '').trim();
-                const href = item.getAttribute('href') || '';
+            const allChildren = menuEl.querySelectorAll('*');
+            log(`🔍 Сканирую ${allChildren.length} элементов в dropdown...`);
+            
+            for (const child of allChildren) {
+                const text = (child.textContent || '').trim();
+                const href = child.getAttribute('href') || '';
                 
-                // Фильтруем только ленты
-                const isFeed = href.includes('/dashboard') || 
-                              (href.includes('/clubs/') && href.includes('/dashboard')) ||
-                              text.toLowerCase() === 'following' ||
-                              text.toLowerCase() === 'подписки' ||
-                              text.toLowerCase() === 'my clubs' ||
-                              text.toLowerCase() === 'мои группы' ||
-                              text.toLowerCase() === 'your clubs' ||
-                              text.toLowerCase() === 'мои клубы';
+                // Пропускаем пустые и слишком длинные
+                if (!text || text.length === 0 || text.length > 100) continue;
                 
-                if (isFeed && text.length > 0) {
-                    options.push({ el: item, text, href });
+                // Это может быть кликабельный элемент?
+                const isClickable = child.tagName === 'A' || 
+                                   child.tagName === 'BUTTON' ||
+                                   child.tagName === 'LI' ||
+                                   child.getAttribute('role') === 'menuitem' ||
+                                   child.getAttribute('role') === 'option' ||
+                                   child.getAttribute('onclick') ||
+                                   child.closest('a') ||
+                                   child.closest('button');
+                
+                if (isClickable) {
+                    // Получаем href из самого элемента или ближайшей ссылки
+                    let actualHref = href;
+                    if (!actualHref) {
+                        const parentLink = child.closest('a');
+                        if (parentLink) actualHref = parentLink.getAttribute('href') || '';
+                    }
+                    
+                    // Проверяем что это похоже на опцию ленты (не настройки, не профиль и т.д.)
+                    const lowerText = text.toLowerCase();
+                    const isFeedOption = actualHref.includes('/dashboard') || 
+                                         actualHref.includes('/clubs/') ||
+                                         lowerText === 'following' ||
+                                         lowerText === 'подписки' ||
+                                         lowerText.includes('club') ||
+                                         lowerText.includes('клуб');
+                    
+                    if (isFeedOption || actualHref) {
+                        // Проверяем дубликаты
+                        if (!options.find(o => o.text === text && o.href === actualHref)) {
+                            log(`   📋 Опция: "${text}" href=${actualHref}`);
+                            options.push({ el: child, text, href: actualHref });
+                        }
+                    }
                 }
             }
         }
         
-        // Также ищем все кликабельные элементы со ссылками на dashboard
+        // Также ищем все ВИДИМЫЕ ссылки на /clubs/ и /dashboard во всем документе
+        // (на случай если dropdown не был найден как контейнер)
         if (options.length === 0) {
-            const allLinks = document.querySelectorAll('a[href*="/dashboard"], a[href*="/clubs/"]');
+            log("🔍 Dropdown не найден, ищу ссылки на всей странице...");
+            const allLinks = document.querySelectorAll('a');
             for (const link of allLinks) {
-                const text = (link.textContent || '').trim();
+                const style = window.getComputedStyle(link);
+                if (style.display === 'none' || style.visibility === 'hidden') continue;
+                
                 const href = link.getAttribute('href') || '';
+                const text = (link.textContent || '').trim();
                 
-                // Пропускаем ссылки на поиск, настройки и т.д.
-                if (href.includes('/search') || href.includes('/settings')) continue;
+                if (!text || text.length === 0 || text.length > 100) continue;
                 
-                if (href.includes('/dashboard') || (href.includes('/clubs/') && href.includes('/dashboard'))) {
+                // Ищем ссылки на ленты
+                const isFeed = href.includes('/dashboard') || 
+                              href.includes('/clubs/');
+                
+                if (isFeed && !href.includes('/search') && !href.includes('/settings')) {
                     if (!options.find(o => o.href === href)) {
                         options.push({ el: link, text, href });
                     }
@@ -354,6 +485,7 @@
             }
         }
         
+        log(`📊 Всего найдено опций: ${options.length}`);
         return options;
     }
     
@@ -395,138 +527,244 @@
         return false;
     }
     
+    // ===== ДИАГНОСТИКА СТРАНИЦЫ =====
+    
+    function diagnosePage() {
+        log("🔬 ДИАГНОСТИКА СТРАНИЦЫ:");
+        log(`  URL: ${window.location.href}`);
+        log(`  Path: ${window.location.pathname}`);
+        
+        // Все кликабельные элементы
+        const allClickable = document.querySelectorAll('a, button, [role="button"], [onclick]');
+        log(`  Всего кликабельных: ${allClickable.length}`);
+        
+        // Элементы в верхней части (первые 300px)
+        let topElements = [];
+        for (const el of allClickable) {
+            const rect = el.getBoundingClientRect();
+            if (rect.top < 300 && rect.width > 30 && rect.height > 20) {
+                const text = (el.textContent || '').trim().substring(0, 50);
+                const href = el.getAttribute('href') || '';
+                topElements.push({ text, href, tag: el.tagName, top: Math.round(rect.top), id: el.id, class: el.className?.substring(0, 50) });
+            }
+        }
+        log(`  Элементов в верхней части: ${topElements.length}`);
+        topElements.slice(0, 10).forEach(e => log(`    - "${e.text}" (${e.tag}) href=${e.href} top=${e.top}`));
+        
+        // Все ссылки на клубы
+        const clubLinks = document.querySelectorAll('a[href*="/clubs/"]');
+        log(`  Ссылок на клубы: ${clubLinks.length}`);
+        const uniqueClubs = new Map();
+        for (const link of clubLinks) {
+            const href = link.getAttribute('href') || '';
+            const text = (link.textContent || '').trim().substring(0, 40);
+            if (!uniqueClubs.has(href)) {
+                uniqueClubs.set(href, text);
+            }
+        }
+        uniqueClubs.forEach((text, href) => log(`    - ${href}: "${text}"`));
+        
+        // Все ссылки на dashboard
+        const dashLinks = document.querySelectorAll('a[href*="dashboard"]');
+        log(`  Ссылок на dashboard: ${dashLinks.length}`);
+        
+        // Элементы с aria-expanded (dropdown toggles)
+        const toggles = document.querySelectorAll('[aria-expanded]');
+        log(`  Toggle элементов (aria-expanded): ${toggles.length}`);
+        for (const t of toggles) {
+            const text = (t.textContent || '').trim().substring(0, 40);
+            const expanded = t.getAttribute('aria-expanded');
+            log(`    - "${text}" expanded=${expanded}`);
+        }
+        
+        return { topElements, clubLinks: Array.from(uniqueClubs.entries()) };
+    }
+    
+    function findAllFeedsOnPage() {
+        const feeds = [];
+        
+        // 1. Ищем в верхней части элементы с текстом "Подписки", "Following" и т.д.
+        const allElements = document.querySelectorAll('a, button, div, span, li');
+        for (const el of allElements) {
+            const text = (el.textContent || '').trim();
+            const lower = text.toLowerCase();
+            const href = el.getAttribute('href') || '';
+            
+            // Ищем основную ленту
+            if ((lower === 'following' || lower === 'подписки') && text.length < 20) {
+                if (!feeds.find(f => f.type === 'main')) {
+                    feeds.push({ type: 'main', text, href, el });
+                }
+            }
+        }
+        
+        // 2. Ищем все ссылки на клубы (/clubs/ID/dashboard или /clubs/ID)
+        const allLinks = document.querySelectorAll('a');
+        for (const link of allLinks) {
+            const href = link.getAttribute('href') || '';
+            const text = (link.textContent || '').trim();
+            
+            // Пропускаем ссылки на поиск, настройки и т.д.
+            if (href.includes('/search') || href.includes('/settings')) continue;
+            
+            // Ищем ссылки на ленты клубов
+            const clubMatch = href.match(/\/clubs\/(\d+)(?:\/dashboard)?/);
+            if (clubMatch) {
+                const clubId = clubMatch[1];
+                if (!feeds.find(f => f.clubId === clubId)) {
+                    feeds.push({ type: 'club', clubId, text: text || `Club ${clubId}`, href, el: link });
+                }
+            }
+            
+            // Ищем ссылки на основной dashboard
+            if ((href === '/dashboard' || href === '/dashboard/following') && 
+                !feeds.find(f => f.type === 'main')) {
+                feeds.push({ type: 'main', text: text || 'Following', href, el: link });
+            }
+        }
+        
+        // 3. Если основную ленту не нашли — добавляем принудительно
+        if (!feeds.find(f => f.type === 'main')) {
+            feeds.unshift({ type: 'main', text: 'Following', href: '/dashboard', el: null });
+        }
+        
+        return feeds;
+    }
+    
+    async function navigateToFeed(feed) {
+        log(`🧭 Навигация на: ${feed.text} (${feed.href || 'no href'})`);
+        
+        if (feed.el) {
+            // Пробуем кликнуть на элемент
+            log(`  Пробую клик на элемент...`);
+            
+            // Скроллим к элементу если нужно
+            const rect = feed.el.getBoundingClientRect();
+            if (rect.top > window.innerHeight || rect.bottom < 0) {
+                feed.el.scrollIntoView({ behavior: 'auto', block: 'center' });
+                await sleep(500);
+            }
+            
+            // Запоминаем URL до клика
+            const beforeUrl = window.location.href;
+            
+            // Кликаем
+            directClick(feed.el);
+            await sleep(2500);
+            
+            // Проверяем, изменился ли URL
+            if (window.location.href !== beforeUrl) {
+                log(`  ✅ URL изменился: ${beforeUrl} → ${window.location.href}`);
+                return true;
+            }
+            
+            log(`  ⚠️ URL не изменился после клика`);
+        }
+        
+        // Fallback: переход по URL
+        if (feed.href && feed.href !== window.location.pathname) {
+            const targetUrl = feed.href.startsWith('http') ? feed.href : 'https://www.strava.com' + feed.href;
+            log(`  🌐 Переход по URL: ${targetUrl}`);
+            window.location.href = targetUrl;
+            await sleep(4000);
+            return true;
+        }
+        
+        log(`  ℹ️ Уже на нужной странице`);
+        return true;
+    }
+
     async function runClubsStrategy() {
         log("🏃 Старт стратегии КЛУБЫ...");
         
-        // Собираем список лент
-        let feeds = [];
+        // Запускаем диагностику
+        const diag = diagnosePage();
         
-        // Пробуем открыть dropdown
-        const opened = await clickFeedSelector();
+        // Собираем ВСЕ ленты на странице
+        let feeds = findAllFeedsOnPage();
         
-        if (opened) {
-            // Собираем опции из открытого dropdown
-            const options = getFeedOptions();
-            log(`📋 Найдено ${options.length} лент в dropdown`);
-            
-            for (const opt of options) {
-                if (!feeds.find(f => f.href === opt.href)) {
-                    feeds.push({
-                        text: opt.text || 'Лента',
-                        href: opt.href,
-                        el: opt.el
-                    });
-                }
-            }
-            
-            // Закрываем dropdown (кликаем в пустое место)
-            document.body.click();
-            await sleep(500);
-        }
-        
-        // Если не нашли через dropdown, пробуем найти на странице
-        if (feeds.length === 0) {
-            log("🔍 Ищу ленты на странице...");
-            
-            // Ищем все ссылки на ленты на странице
-            const pageFeeds = getPageFeeds();
-            for (const feed of pageFeeds) {
-                // Получаем href из ближайшей ссылки
-                let href = '';
-                if (feed.el.tagName === 'A') {
-                    href = feed.el.getAttribute('href') || '';
-                } else {
-                    const link = feed.el.closest('a');
-                    if (link) href = link.getAttribute('href') || '';
-                }
-                
-                if (!href) {
-                    // Если нет href, пробуем onclick или data-атрибуты
-                    href = feed.el.getAttribute('data-href') || 
-                           feed.el.getAttribute('data-url') || '';
-                }
-                
-                // Добавляем даже без href — попробуем просто кликнуть
-                if (!feeds.find(f => f.text === feed.text)) {
-                    feeds.push({
-                        text: feed.text,
-                        href: href,
-                        el: feed.el
-                    });
-                }
-            }
-        }
-        
-        // Добавляем основную ленту если её нет
-        const hasMainFeed = feeds.some(f => 
-            f.text.toLowerCase() === 'following' || 
-            f.text.toLowerCase() === 'подписки' ||
-            f.href === '/dashboard' ||
-            f.href === '/dashboard/following'
-        );
-        
-        if (!hasMainFeed) {
-            feeds.unshift({ text: 'Following', href: '/dashboard', el: null });
-        }
-        
-        log(`📊 Всего лент: ${feeds.length}`);
-        feeds.forEach((f, i) => log(`  ${i+1}. ${f.text} (${f.href || 'no href'})`));
+        log(`📊 Всего лент найдено: ${feeds.length}`);
+        feeds.forEach((f, i) => {
+            const extra = f.clubId ? ` (club #${f.clubId})` : '';
+            log(`  ${i+1}. [${f.type}] ${f.text} → ${f.href || 'no href'}${extra}`);
+        });
         
         if (feeds.length <= 1) {
-            log("⚠️ Найдена только 1 лента, переключаюсь на умную стратегию");
+            log("⚠️ Найдена только 1 лента. Возможно, нужно открыть меню клубов.");
+            log("🔍 Пробую найти и открыть боковое меню...");
+            
+            // Пробуем открыть боковое меню (hamburger)
+            const menuBtn = document.querySelector('button[aria-label*="menu" i], button[class*="hamburger" i], [data-testid*="menu" i], button svg[class*="menu" i]');
+            if (menuBtn) {
+                log("  Найдена кнопка меню, открываю...");
+                directClick(menuBtn);
+                await sleep(2000);
+                
+                // После открытия меню заново ищем ленты
+                feeds = findAllFeedsOnPage();
+                log(`  После открытия меню найдено лент: ${feeds.length}`);
+            }
+        }
+        
+        // Если всё ещё 1 лента — пробуем навигацию через /clubs/search
+        if (feeds.length <= 1) {
+            log("⚠️ Всё ещё только 1 лента. Перехожу на страницу клубов...");
+            window.location.href = 'https://www.strava.com/clubs/search';
+            await sleep(4000);
+            
+            // После загрузки страницы клубов заново ищем
+            feeds = findAllFeedsOnPage();
+            log(`  После перехода на /clubs/search найдено лент: ${feeds.length}`);
+        }
+        
+        // Финальная проверка
+        if (feeds.length <= 1) {
+            log("❌ Не удалось найти клубы. Переключаюсь на умную стратегию.");
             await runSmartStrategy();
             return;
         }
         
         let feedIndex = 0;
         let emptyCycles = 0;
+        let totalLiked = 0;
         
         while (!window.kudosBotShouldStop) {
             const feed = feeds[feedIndex];
-            log(`\n=== 📰 ${feed.text} ===`);
+            log(`\n=== 📰 [${feed.type.toUpperCase()}] ${feed.text} ===`);
             
-            // Переключаемся на ленту
-            if (feed.el) {
-                // Если есть элемент — кликаем на него через dropdown
-                await clickFeedSelector();
-                await sleep(1000);
-                
-                // Переищем опции (DOM мог измениться)
-                const currentOptions = getFeedOptions();
-                const targetOption = currentOptions.find(o => 
-                    o.text === feed.text || o.href === feed.href
-                );
-                
-                if (targetOption) {
-                    await switchToFeed(targetOption);
-                } else {
-                    log(`⚠️ Опция "${feed.text}" не найдена в dropdown, пробую прямой клик`);
-                    directClick(feed.el);
-                    await sleep(3000);
+            // Проверяем, не на нужной ли уже странице
+            const currentPath = window.location.pathname;
+            const isCurrent = (feed.type === 'main' && currentPath.includes('dashboard')) ||
+                             (feed.type === 'club' && currentPath.includes(`/clubs/${feed.clubId}`));
+            
+            if (!isCurrent) {
+                // Переходим на ленту
+                const navSuccess = await navigateToFeed(feed);
+                if (!navSuccess) {
+                    log("  ❌ Не удалось перейти, пропускаю...");
+                    feedIndex = (feedIndex + 1) % feeds.length;
+                    await sleep(2000);
+                    continue;
                 }
-                
-                // Закрываем dropdown если открыт
-                document.body.click();
-                await sleep(500);
-            } else if (feed.href && feed.href !== window.location.pathname) {
-                // Если нет элемента но есть href — переходим по URL
-                log(`🌐 Переход по URL: ${feed.href}`);
-                window.location.href = 'https://www.strava.com' + feed.href;
-                await sleep(4000);
+            } else {
+                log("  ℹ️ Уже на нужной странице");
             }
             
             // Лайкаем в текущей ленте
             await scrollToTop();
-            await sleep(1000);
+            await sleep(1500); // Ждем полной загрузки контента
             
-            const clicked = await scrollAndLike(20);
+            const clicked = await scrollAndLike(25);
+            totalLiked += clicked;
+            
+            log(`  ✅ Лайкнуто в этой ленте: ${clicked} (всего: ${totalLiked})`);
             
             if (clicked === 0) {
                 emptyCycles++;
-                log(`📭 Пустая лента (${emptyCycles}/3)`);
+                log(`  📭 Пустая лента (${emptyCycles}/3)`);
                 
                 if (emptyCycles >= 3) {
-                    log("💤 Все ленты пусты, пауза 30с...");
+                    log("  💤 Все ленты пусты, пауза 30с...");
                     await sleep(30000);
                     emptyCycles = 0;
                 }
@@ -536,7 +774,8 @@
             
             // Переходим к следующей ленте
             feedIndex = (feedIndex + 1) % feeds.length;
-            await sleep(2000);
+            log(`  ➡️ Переключаюсь на следующую ленту...`);
+            await sleep(3000);
         }
     }
 
