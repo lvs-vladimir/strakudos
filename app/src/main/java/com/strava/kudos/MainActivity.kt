@@ -48,7 +48,7 @@ class MainActivity : AppCompatActivity() {
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
         val savedStrategy = sharedPref.getString("strategy", "smart") ?: "smart"
         kudosCount = sharedPref.getInt("kudos_count", 0)
-        tvStats.text = "ЛАЙКОВ ОТПРАВЛЕНО: $kudosCount"
+        tvStats.text = kudosCount.toString()
         updateStrategyText(savedStrategy)
 
         val settings = webView.settings
