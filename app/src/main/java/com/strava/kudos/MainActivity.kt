@@ -1,6 +1,7 @@
 package com.strava.kudos
 
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.os.Bundle
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
@@ -9,7 +10,6 @@ import android.webkit.CookieManager
 import android.widget.Button
 import android.widget.ScrollView
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.drawerlayout.widget.DrawerLayout
 import com.google.android.material.navigation.NavigationView
@@ -115,91 +115,13 @@ class MainActivity : AppCompatActivity() {
         navigationView.setNavigationItemSelectedListener { menuItem ->
             drawerLayout.closeDrawers()
             when (menuItem.itemId) {
-                R.id.nav_strategy -> showStrategyDialog()
-                R.id.nav_settings -> showSettingsDialog()
-                R.id.nav_about -> showAboutDialog()
+                R.id.nav_strategy -> startActivity(Intent(this, StrategyActivity::class.java))
+                R.id.nav_settings -> startActivity(Intent(this, SettingsActivity::class.java))
+                R.id.nav_logs -> startActivity(Intent(this, LogsActivity::class.java))
+                R.id.nav_about -> startActivity(Intent(this, AboutActivity::class.java))
             }
             true
         }
-    }
-
-    private fun showStrategyDialog() {
-        AlertDialog.Builder(this, androidx.appcompat.R.style.ThemeOverlay_AppCompat_Dialog_Alert)
-            .setTitle("Стратегия работы бота")
-            .setMessage(
-                "Текущая стратегия:\n\n" +
-                "1. Бот сканирует видимую часть ленты и ставит лайки\n" +
-                "2. Если нет тренировок - скроллит вниз небольшими шагами\n" +
-                "3. При достижении предела - возвращается в начало ленты\n" +
-                "4. Обновляет страницу для получения новых тренировок\n\n" +
-                "Интервал задержки:\n" +
-                "Мин: ${etMinDelay.text} мс\n" +
-                "Макс: ${etMaxDelay.text} мс\n\n" +
-                "Всего отправлено лайков: $kudosCount"
-            )
-            .setPositiveButton("OK", null)
-            .show()
-            .apply {
-                window?.setBackgroundDrawableResource(android.R.color.black)
-            }
-    }
-
-    private fun showSettingsDialog() {
-        val builder = AlertDialog.Builder(this, androidx.appcompat.R.style.ThemeOverlay_AppCompat_Dialog_Alert)
-        builder.setTitle("Настройки")
-        
-        val layout = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(40, 20, 40, 20)
-        }
-        
-        val resetCountBtn = Button(this).apply {
-            text = "Сбросить счетчик лайков"
-            setBackgroundColor(android.graphics.Color.parseColor("#00F0FF"))
-            setTextColor(android.graphics.Color.BLACK)
-        }
-        
-        resetCountBtn.setOnClickListener {
-            kudosCount = 0
-            val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
-            with(sharedPref.edit()) {
-                putInt("kudos_count", 0)
-                apply()
-            }
-            tvStats.text = "ЛАЙКОВ ОТПРАВЛЕНО: 0"
-            appendLog("Счетчик лайков сброшен")
-        }
-        
-        layout.addView(resetCountBtn)
-        
-        builder.setView(layout)
-        builder.setPositiveButton("OK", null)
-        builder.show()
-            .apply {
-                window?.setBackgroundDrawableResource(android.R.color.black)
-            }
-    }
-
-    private fun showAboutDialog() {
-        AlertDialog.Builder(this, androidx.appcompat.R.style.ThemeOverlay_AppCompat_Dialog_Alert)
-            .setTitle("О приложении")
-            .setMessage(
-                "Strakudos v1.0.0\n\n" +
-                "Автоматизация лайков для Strava\n\n" +
-                "Особенности:\n" +
-                "- Автоматические лайки друзьям\n" +
-                "- Настраиваемый интервал задержки\n" +
-                "- Блокировка экрана во время работы\n" +
-                "- Сохранение настроек и статистики\n" +
-                "- Умная стратегия прокрутки\n\n" +
-                "Дизайн: Vision Framework\n" +
-                "Язык: Русский"
-            )
-            .setPositiveButton("OK", null)
-            .show()
-            .apply {
-                window?.setBackgroundDrawableResource(android.R.color.black)
-            }
     }
 
     private fun startBot() {
@@ -263,6 +185,11 @@ class MainActivity : AppCompatActivity() {
     private fun appendLog(message: String) {
         runOnUiThread {
             tvLogs.append("[$currentTimestamp] $message\n")
+            val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
+            with(sharedPref.edit()) {
+                putString("logs", tvLogs.text.toString())
+                apply()
+            }
             scrollLog.post {
                 scrollLog.fullScroll(ScrollView.FOCUS_DOWN)
             }

@@ -13,6 +13,11 @@
             android:icon="@android:drawable/ic_menu_preferences" />
 
         <item
+            android:id="@+id/nav_logs"
+            android:title="Системные логи"
+            android:icon="@android:drawable/ic_menu_sort_by_size" />
+
+        <item
             android:id="@+id/nav_about"
             android:title="О приложении"
             android:icon="@android:drawable/ic_menu_info_details" />
