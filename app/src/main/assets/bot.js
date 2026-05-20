@@ -272,7 +272,7 @@
                             el.getAttribute('aria-expanded') !== null;
             
             if (hasFeedText && hasArrow) {
-                log(`   🎯 Найден dropdown: "${text.substring(0, 50)}"`);
+                log('   🎯 Найден dropdown: [' + text.substring(0, 50) + ']');
                 directClick(el);
                 await sleep(1500);
                 return true;
@@ -292,7 +292,7 @@
             if (lower.includes('подписки') || lower.includes('following') || 
                 lower.includes('feed') || lower.includes('лента') ||
                 text.length < 50) { // Короткий текст — скорее всего заголовок ленты
-                log(`   🎯 Найден toggle кнопка: "${text.substring(0, 40)}"`);
+                log('   🎯 Найден toggle кнопка: [' + text.substring(0, 40) + ']');
                 directClick(btn);
                 await sleep(1500);
                 return true;
@@ -317,7 +317,7 @@
                         parent.getAttribute('role') === 'button' ||
                         parent.onclick ||
                         parent.getAttribute('onclick')) {
-                        log(`   🎯 Найден родитель-кнопка для "${text}"`);
+                        log('   🎯 Найден родитель-кнопка для [' + text + ']');
                         directClick(parent);
                         await sleep(1500);
                         return true;
@@ -328,7 +328,7 @@
                 
                 // Если не нашли кнопку-родителя, кликаем на сам элемент
                 // (иногда весь блок обернут в div с onclick)
-                log(`   🎯 Кликаю на текст "${text}" (проверяю родителей)...`);
+                log('   🎯 Кликаю на текст [' + text + '] (проверяю родителей)...');
                 directClick(el);
                 await sleep(1500);
                 
@@ -409,7 +409,7 @@
                     if (linkInside) href = linkInside.getAttribute('href') || '';
                 }
                 
-                log(`    📋 Опция: "${text}" (href=${href || 'none'})`);
+                log('    📋 Опция: [' + text + '] (href=' + (href || 'none') + ')');
                 options.push({ el: child, text, href });
             }
             
@@ -453,7 +453,7 @@
         }
         
         log(`📊 Всего уникальных опций в dropdown: ${uniqueOptions.length}`);
-        uniqueOptions.forEach((o, i) => log(`  ${i+1}. "${o.text}"`));
+        uniqueOptions.forEach((o, i) => log('  ' + (i+1) + '. [' + o.text + ']'));
         
         return uniqueOptions;
     }
@@ -518,7 +518,7 @@
             }
         }
         log(`  Элементов в верхней части: ${topElements.length}`);
-        topElements.slice(0, 10).forEach(e => log(`    - "${e.text}" (${e.tag}) href=${e.href} top=${e.top}`));
+        topElements.slice(0, 10).forEach(e => log('    - [' + e.text + '] (' + e.tag + ') href=' + e.href + ' top=' + e.top));
         
         // Все ссылки на клубы
         const clubLinks = document.querySelectorAll('a[href*="/clubs/"]');
@@ -531,7 +531,7 @@
                 uniqueClubs.set(href, text);
             }
         }
-        uniqueClubs.forEach((text, href) => log(`    - ${href}: "${text}"`));
+        uniqueClubs.forEach((text, href) => log('    - ' + href + ': [' + text + ']'));
         
         // Все ссылки на dashboard
         const dashLinks = document.querySelectorAll('a[href*="dashboard"]');
@@ -543,7 +543,7 @@
         for (const t of toggles) {
             const text = (t.textContent || '').trim().substring(0, 40);
             const expanded = t.getAttribute('aria-expanded');
-            log(`    - "${text}" expanded=${expanded}`);
+            log('    - [' + text + '] expanded=' + expanded);
         }
         
         return { topElements, clubLinks: Array.from(uniqueClubs.entries()) };
@@ -671,7 +671,7 @@
         // Собираем опции из открытого dropdown
         feeds = getFeedOptions();
         log(`📊 Найдено ${feeds.length} лент в dropdown`);
-        feeds.forEach((f, i) => log(`  ${i+1}. "${f.text}"`));
+        feeds.forEach((f, i) => log('  ' + (i+1) + '. [' + f.text + ']'));
         
         if (feeds.length <= 1) {
             log("⚠️ Найдена только 1 лента. Пробую ещё раз...");
@@ -691,7 +691,7 @@
         // ГЛАВНЫЙ ЦИКЛ: по очереди выбираем ленты из dropdown
         while (!window.kudosBotShouldStop) {
             const feed = feeds[feedIndex];
-            log(`\n=== 📰 ${feed.text} (${feedIndex + 1}/${feeds.length}) ===`);
+            log(`=== 📰 ${feed.text} (${feedIndex + 1}/${feeds.length}) ===`);
             
             // Сохраняем текущий индекс
             try {
@@ -700,7 +700,7 @@
             } catch(e) {}
             
             // ШАГ 1: Открываем dropdown
-            log("  1️⃣ Открываю dropdown...");
+            log("  [1] Открываю dropdown...");
             const opened = await clickFeedSelector();
             if (!opened) {
                 log("  ⚠️ Не удалось открыть dropdown, пробую ещё раз...");
@@ -709,7 +709,7 @@
             }
             
             // ШАГ 2: Находим и кликаем на нужную опцию
-            log(`  2️⃣ Ищу опцию "${feed.text}"...");
+            log("  [2] Ищу опцию [" + feed.text + "]...");
             const currentOptions = getFeedOptions();
             
             // Ищем опцию по тексту (точное или частичное совпадение)
@@ -732,7 +732,7 @@
             }
             
             if (!targetOption) {
-                log(`  ❌ Опция "${feed.text}" не найдена в dropdown. Пропускаю...`);
+                log('  ❌ Опция [' + feed.text + '] не найдена в dropdown. Пропускаю...');
                 feedIndex = (feedIndex + 1) % feeds.length;
                 document.body.click(); // Закрываем dropdown
                 await sleep(2000);
@@ -740,11 +740,11 @@
             }
             
             // Кликаем на опцию
-            log(`  3️⃣ Кликаю на "${targetOption.text}"...`);
+            log('  [3] Кликаю на [' + targetOption.text + ']...');
             directClick(targetOption.el);
             
             // Ждем обновления контента (SPA — без перезагрузки)
-            log("  4️⃣ Жду обновления контента...");
+            log("  [4] Жду обновления контента...");
             await sleep(3000);
             
             // Проверяем что dropdown закрылся
@@ -752,7 +752,7 @@
             await sleep(500);
             
             // ШАГ 3: Лайкаем записи в текущей ленте
-            log("  5️⃣ Лайкаю записи...");
+            log("  [5] Лайкаю записи...");
             await scrollToTop();
             await sleep(1000);
             
