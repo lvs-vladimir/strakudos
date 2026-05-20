@@ -192,6 +192,16 @@ class MainActivity : AppCompatActivity() {
         val strategy = sharedPref.getString("strategy", "smart") ?: "smart"
         updateStrategyText(strategy)
 
+        // Если бот был запущен и страница загружена — перезапускаем бота
+        if (isBotRunning) {
+            val currentUrl = webView.url
+            Log.d(TAG, "onResume: bot was running, checking url=$currentUrl")
+            if (currentUrl != null && (currentUrl.contains("strava.com/dashboard") || currentUrl.contains("strava.com/clubs/"))) {
+                Log.d(TAG, "onResume: restarting bot on current page")
+                restartBot()
+            }
+        }
+
         // Регистрируем receiver для остановки из уведомления
         registerReceiver(serviceStopReceiver, IntentFilter("com.strava.kudos.SERVICE_STOPPED"),
             Context.RECEIVER_NOT_EXPORTED)
