@@ -202,43 +202,18 @@
                     android:padding="2dp" />
             </LinearLayout>
 
-            <!-- Buttons Panel (Exact Vision style pill shapes) -->
-            <LinearLayout
+            <!-- Toggle Button (Start/Stop) -->
+            <Button
+                android:id="@+id/btnToggle"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center">
-
-                <Button
-                    android:id="@+id/btnStart"
-                    android:layout_width="0dp"
-                    android:layout_height="38dp"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="8dp"
-                    android:background="@drawable/btn_primary_bg"
-                    android:text="СТАРТ"
-                    android:textColor="#000000"
-                    android:textStyle="bold"
-                    android:textSize="11sp"
-                    android:letterSpacing="0.1"
-                    android:padding="0dp" />
-
-                <Button
-                    android:id="@+id/btnStop"
-                    android:layout_width="0dp"
-                    android:layout_height="38dp"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="8dp"
-                    android:background="@drawable/btn_secondary_bg"
-                    android:enabled="false"
-                    android:text="СТОП"
-                    android:textColor="#FFFFFF"
-                    android:textStyle="bold"
-                    android:textSize="11sp"
-                    android:letterSpacing="0.1"
-                    android:padding="0dp" />
-
-            </LinearLayout>
+                android:layout_height="48dp"
+                android:background="@drawable/btn_primary_bg"
+                android:text="СТАРТ"
+                android:textColor="#000000"
+                android:textStyle="bold"
+                android:textSize="14sp"
+                android:letterSpacing="0.15"
+                android:padding="0dp" />
         </LinearLayout>
         </LinearLayout>
     </LinearLayout>

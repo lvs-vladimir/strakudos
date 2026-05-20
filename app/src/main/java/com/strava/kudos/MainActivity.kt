@@ -20,8 +20,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var tvStatus: TextView
     private lateinit var tvStats: TextView
-    private lateinit var btnStart: Button
-    private lateinit var btnStop: Button
+    private lateinit var btnToggle: Button
     private lateinit var etMinDelay: android.widget.EditText
     private lateinit var etMaxDelay: android.widget.EditText
     private lateinit var touchOverlay: android.view.View
@@ -40,8 +39,7 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webView)
         tvStatus = findViewById(R.id.tvStatus)
         tvStats = findViewById(R.id.tvStats)
-        btnStart = findViewById(R.id.btnStart)
-        btnStop = findViewById(R.id.btnStop)
+        btnToggle = findViewById(R.id.btnToggle)
         etMinDelay = findViewById(R.id.etMinDelay)
         etMaxDelay = findViewById(R.id.etMaxDelay)
         touchOverlay = findViewById(R.id.touchOverlay)
@@ -88,12 +86,12 @@ class MainActivity : AppCompatActivity() {
 
         webView.loadUrl("https://www.strava.com/login")
 
-        btnStart.setOnClickListener {
-            startBot()
-        }
-
-        btnStop.setOnClickListener {
-            stopBot()
+        btnToggle.setOnClickListener {
+            if (isBotRunning) {
+                stopBot()
+            } else {
+                startBot()
+            }
         }
 
         btnMenu.setOnClickListener {
@@ -129,8 +127,9 @@ class MainActivity : AppCompatActivity() {
         if (botScript.isNotEmpty()) {
             webView.evaluateJavascript(botScript, null)
             isBotRunning = true
-            btnStart.isEnabled = false
-            btnStop.isEnabled = true
+            btnToggle.text = "СТОП"
+            btnToggle.setBackgroundResource(R.drawable.btn_secondary_bg)
+            btnToggle.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
             touchOverlay.visibility = android.view.View.VISIBLE
             tvStatus.text = "РАБОТАЕТ"
             tvStatus.setTextColor(android.graphics.Color.parseColor("#00F0FF"))
@@ -140,8 +139,9 @@ class MainActivity : AppCompatActivity() {
     private fun stopBot() {
         webView.evaluateJavascript("window.kudosBotShouldStop = true;", null)
         isBotRunning = false
-        btnStart.isEnabled = true
-        btnStop.isEnabled = false
+        btnToggle.text = "СТАРТ"
+        btnToggle.setBackgroundResource(R.drawable.btn_primary_bg)
+        btnToggle.setTextColor(android.graphics.Color.parseColor("#000000"))
         touchOverlay.visibility = android.view.View.GONE
         tvStatus.text = "ОСТАНОВЛЕН"
         tvStatus.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
