@@ -1,6 +1,6 @@
-// Strakudos Bot v1.3.9 - Club rotation with card-by-card processing
+// Strakudos Bot v1.4.2 - Exclude give_kudos_button popup, only real kudos_button
 (function() {
-    console.log("[KudosBot] Loading bot v1.3.9...");
+    console.log("[KudosBot] Loading bot v1.4.2...");
     if (window.kudosBotRunning) {
         console.log("Бот уже запущен.");
         return;
@@ -68,8 +68,8 @@
                     
                     let isKudos = false;
                     
-                    // data-testid содержит "kudos"
-                    if (testId.includes('kudos')) {
+                    // ТОЛЬКО настоящая кнопка лайка (не give_kudos_button — это popup!)
+                    if (testId === 'kudos_button' || testId === 'un-kudos_button') {
                         isKudos = true;
                     }
                     // aria-label содержит "kudos"
@@ -565,10 +565,10 @@
                     if (rect.width === 0 || rect.height === 0) continue;
                     if (rect.width > 200 || rect.height > 100) continue;
                     
-                    // Проверяем является ли кнопка лайком
+                    // Проверяем является ли кнопка лайком (ТОЛЬКО настоящая кнопка, не popup!)
                     let isKudos = false;
-                    if (testId.includes('kudos')) isKudos = true;
-                    else if (aria.includes('kudos') && !/\d/.test(aria)) isKudos = true;
+                    if (testId === 'kudos_button' || testId === 'un-kudos_button') isKudos = true;
+                    else if (aria.includes('give') && aria.includes('kudos')) isKudos = true;
                     else if (rect.width <= 60 && rect.height <= 60 && !text) {
                         const svg = btn.querySelector('svg');
                         if (svg && (svg.innerHTML.toLowerCase().includes('heart') || svg.innerHTML.toLowerCase().includes('thumb'))) {
@@ -576,10 +576,13 @@
                         }
                     }
                     
+                    // ❌ ЯВНО исключаем give_kudos_button — это открывает popup!
+                    if (testId === 'give_kudos_button') isKudos = false;
+                    
                     if (!isKudos) continue;
                     
                     // Проверяем не лайкнут ли уже
-                    const isLiked = testId.includes('un-kudos') || 
+                    const isLiked = testId === 'un-kudos_button' || 
                                      cls.includes('liked') ||
                                      cls.includes('active') ||
                                      (btn.querySelector('svg')?.getAttribute('fill') === '#fc5200');
