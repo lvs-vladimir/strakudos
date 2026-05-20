@@ -130,16 +130,23 @@
                 android:gravity="center_vertical"
                 android:layout_marginBottom="12dp">
 
-                <View
-                    android:layout_width="0dp"
-                    android:layout_height="0dp"
-                    android:layout_weight="1" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ЛАЙКОВ ОТПРАВЛЕНО:"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold"
+                    android:fontFamily="sans-serif-condensed"
+                    android:textSize="12sp"
+                    android:letterSpacing="0.1" />
 
                 <TextView
                     android:id="@+id/tvStats"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="ЛАЙКОВ ОТПРАВЛЕНО: 0"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:text="0"
                     android:textColor="#00F0FF"
                     android:textStyle="bold"
                     android:fontFamily="sans-serif-condensed"

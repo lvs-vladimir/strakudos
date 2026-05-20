@@ -207,7 +207,7 @@ class MainActivity : AppCompatActivity() {
         fun onKudosGiven(athleteName: String) {
             runOnUiThread {
                 kudosCount++
-                tvStats.text = "ЛАЙКОВ ОТПРАВЛЕНО: $kudosCount"
+        tvStats.text = kudosCount.toString()
                 val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
                 with(sharedPref.edit()) {
                     putInt("kudos_count", kudosCount)
