@@ -1,6 +1,6 @@
-// Strakudos Bot v1.4.2 - Exclude give_kudos_button popup, only real kudos_button
+// Strakudos Bot v1.4.3 - Skip own activities and old (>3d) activities in clubs
 (function() {
-    console.log("[KudosBot] Loading bot v1.4.2...");
+    console.log("[KudosBot] Loading bot v1.4.3...");
     if (window.kudosBotRunning) {
         console.log("Бот уже запущен.");
         return;
@@ -546,6 +546,18 @@
                 if (cardId) processedCardIds.add(cardId);
                 newCardsCount++;
                 
+                // Проверяем — это своя тренировка?
+                if (isOwnActivity(card)) {
+                    log('  Пропускаю свою тренировку');
+                    continue;
+                }
+                
+                // Проверяем — не старше ли 3 дней?
+                if (!isRecentActivity(card)) {
+                    log('  Пропускаю — тренировка старше 3 дней');
+                    continue;
+                }
+                
                 // Скроллим к карточке
                 card.scrollIntoView({ behavior: 'auto', block: 'center' });
                 await sleep(1500);
@@ -681,6 +693,187 @@
             }
             return card.getAttribute('data-testid') || card.id;
         } catch(e) { return null; }
+    }
+    
+    function getCurrentUserName() {
+        // Получаем имя текущего пользователя со страницы
+        try {
+            // Ищем в шапке сайта (обычно там аватар + имя)
+            const userLinks = document.querySelectorAll('a[href*="/athletes/"]');
+            for (const link of userLinks) {
+                const href = link.getAttribute('href') || '';
+                // Исключаем ссылки на других атлетов (содержат ID)
+                if (href.match(/\/athletes\/(\d+)$/)) {
+                    // Это может быть текущий пользователь — берем текст
+                    const text = link.textContent.trim();
+                    if (text && text.length > 1 && text.length < 50) {
+                        return text;
+                    }
+                }
+            }
+            
+            // Ищем в меню навигации
+            const menuItems = document.querySelectorAll('[class*="nav"] a, [class*="menu"] a, [class*="user"] a');
+            for (const item of menuItems) {
+                const text = item.textContent.trim();
+                if (text && text.length > 1 && text.length < 50) {
+                    return text;
+                }
+            }
+            
+            // Ищем в заголовке или профиле
+            const profileEl = document.querySelector('[data-testid="profile-name"], .profile-name, [class*="username" i]');
+            if (profileEl) {
+                return profileEl.textContent.trim();
+            }
+            
+            return null;
+        } catch(e) {
+            return null;
+        }
+    }
+    
+    function isOwnActivity(card) {
+        // Проверяем — это тренировка текущего пользователя?
+        try {
+            const athleteName = findAthleteNameFromCard(card);
+            const currentUser = getCurrentUserName();
+            
+            if (!currentUser || !athleteName) return false;
+            
+            // Сравниваем имена (без учета регистра)
+            if (athleteName.toLowerCase() === currentUser.toLowerCase()) {
+                log('  Пропускаю свою тренировку: ' + athleteName);
+                return true;
+            }
+            
+            // Проверяем — есть ли ссылка на профиль текущего пользователя в карточке
+            const athleteLink = card.querySelector('a[href*="/athletes/"]');
+            if (athleteLink) {
+                const href = athleteLink.getAttribute('href') || '';
+                // Если href содержит ID текущего пользователя (нужно знать свой ID)
+                // Но мы не знаем свой ID, поэтому сравниваем по имени
+            }
+            
+            return false;
+        } catch(e) {
+            return false;
+        }
+    }
+    
+    function isRecentActivity(card) {
+        // Проверяем дату тренировки в карточке — не старше 3 дней (72 часа)
+        try {
+            // Ищем элемент с временем/датой (обычно рядом с именем атлета)
+            const timeEl = card.querySelector('time') || 
+                          card.querySelector('[data-testid*="time" i]') ||
+                          card.querySelector('.timestamp') ||
+                          card.querySelector('[class*="time" i]') ||
+                          card.querySelector('span[class*="date" i]') ||
+                          card.querySelector('span');
+            
+            if (!timeEl) return true; // Если не нашли дату — лайкаем на всякий случай
+            
+            const timeText = timeEl.textContent.trim().toLowerCase();
+            
+            // "just now", "now" — прямо сейчас
+            if (timeText.includes('just now') || timeText === 'now') return true;
+            
+            // Содержит "ago" — "2 hours ago", "1 day ago", "3 days ago"
+            if (timeText.includes('ago')) {
+                // Извлекаем число
+                const match = timeText.match(/(\d+)\s*(hour|hr|h|day|d)/);
+                if (match) {
+                    const num = parseInt(match[1]);
+                    const unit = match[2];
+                    if (unit.startsWith('h') || unit.startsWith('hr')) {
+                        return num <= 72; // часы
+                    } else if (unit.startsWith('d') || unit === 'day') {
+                        return num <= 3; // дни
+                    }
+                }
+                // "hours ago", "days ago" без числа (редко) — считаем свежим
+                if (timeText.includes('hour') || timeText.includes('hr')) return true;
+                if (timeText.includes('day')) {
+                    // "a day ago" — 1 день
+                    return !timeText.includes('days') || timeText.includes('1 day');
+                }
+                return true;
+            }
+            
+            // Формат "2h", "5h", "1d", "2d" (сокращенный)
+            const shortMatch = timeText.match(/^(\d+)([hd])$/);
+            if (shortMatch) {
+                const num = parseInt(shortMatch[1]);
+                const unit = shortMatch[2];
+                if (unit === 'h') return num <= 72;
+                if (unit === 'd') return num <= 3;
+            }
+            
+            // "yesterday" — 1 день
+            if (timeText.includes('yesterday')) return true;
+            
+            // "today" — сегодня
+            if (timeText.includes('today')) return true;
+            
+            // Формат "May 20", "Jun 15", "Dec 1" — сравниваем с текущей датой
+            const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+            const monthMatch = timeText.match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d+)/i);
+            if (monthMatch) {
+                const monthIdx = monthNames.indexOf(monthMatch[1].toLowerCase().substring(0, 3));
+                const day = parseInt(monthMatch[2]);
+                const now = new Date();
+                const currentYear = now.getFullYear();
+                const activityDate = new Date(currentYear, monthIdx, day);
+                
+                // Если дата в будущем (например, декабрь в январе), берем прошлый год
+                if (activityDate > now) {
+                    activityDate.setFullYear(currentYear - 1);
+                }
+                
+                const diffHours = (now - activityDate) / (1000 * 60 * 60);
+                return diffHours <= 72; // 3 дня = 72 часа
+            }
+            
+            // Числовой формат "20.05", "05/20" (день.месяц или месяц/день)
+            const numericMatch = timeText.match(/(\d{1,2})[\/\.\-](\d{1,2})/);
+            if (numericMatch) {
+                const now = new Date();
+                const currentYear = now.getFullYear();
+                // Пробуем оба формата: день.месяц и месяц.день
+                let d1 = parseInt(numericMatch[1]);
+                let d2 = parseInt(numericMatch[2]);
+                
+                // Если первое число > 12 — это скорее день
+                let day, month;
+                if (d1 > 12) {
+                    day = d1; month = d2 - 1;
+                } else if (d2 > 12) {
+                    day = d2; month = d1 - 1;
+                } else {
+                    // Неоднозначно — пробуем оба варианта, берем ближайший к сегодня
+                    const date1 = new Date(currentYear, d2 - 1, d1);
+                    const date2 = new Date(currentYear, d1 - 1, d2);
+                    const diff1 = Math.abs(now - date1);
+                    const diff2 = Math.abs(now - date2);
+                    const activityDate = diff1 < diff2 ? date1 : date2;
+                    const diffHours = (now - activityDate) / (1000 * 60 * 60);
+                    return diffHours <= 72;
+                }
+                
+                const activityDate = new Date(currentYear, month, day);
+                const diffHours = (now - activityDate) / (1000 * 60 * 60);
+                return diffHours <= 72;
+            }
+            
+            // Если не распарсили — лайкаем на всякий случай
+            log('  Не распарсил дату: [' + timeText + '], лайкаю на всякий случай');
+            return true;
+            
+        } catch(e) {
+            log('  Ошибка при проверке даты: ' + e.message);
+            return true; // При ошибке — лайкаем
+        }
     }
     
     // ====== НАВИГАЦИЯ ПО ЛЕНТАМ ======
