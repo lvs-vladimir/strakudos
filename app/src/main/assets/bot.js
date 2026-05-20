@@ -564,34 +564,22 @@
                 const actId = item.actId;
                 if (window.kudosBotShouldStop) break;
                 
-                // Проверяем что элемент в viewport
+                // Упрощенная проверка — кнопка должна быть видимой и иметь размер
                 const btnRect = btn.getBoundingClientRect();
-                if (btnRect.top < 0 || btnRect.bottom > window.innerHeight) {
-                    continue;
-                }
-                
-                // Проверяем что элемент видим и кликабелен
                 if (btnRect.width === 0 || btnRect.height === 0) continue;
                 
-                const x = btnRect.left + btnRect.width / 2;
-                const y = btnRect.top + btnRect.height / 2;
-                const elAtPoint = document.elementFromPoint(x, y);
-                if (!elAtPoint) continue;
-                
-                // Проверяем что элемент под курсором — это наша кнопка или её потомок
-                let isTarget = false;
-                let checkEl = elAtPoint;
-                while (checkEl) {
-                    if (checkEl === btn || btn.contains(checkEl)) {
-                        isTarget = true;
-                        break;
-                    }
-                    checkEl = checkEl.parentElement;
-                }
-                if (!isTarget) continue;
+                // Проверяем что кнопка в пределах экрана (с небольшим допуском)
+                const isVisible = btnRect.top < window.innerHeight + 100 && btnRect.bottom > -100;
+                if (!isVisible) continue;
                 
                 const athlete = findAthleteName(btn);
-                log('Лайкаю: ' + athlete);
+                log('Лайкаю: ' + athlete + ' (кнопка: ' + Math.round(btnRect.left) + ',' + Math.round(btnRect.top) + ')');
+                
+                // Скроллим к кнопке если она близко к краю
+                if (btnRect.top < 100 || btnRect.bottom > window.innerHeight - 100) {
+                    btn.scrollIntoView({ behavior: 'auto', block: 'center' });
+                    await sleep(500);
+                }
                 
                 const min = window.kudosMinDelay || 3000;
                 const max = window.kudosMaxDelay || 8000;
@@ -602,13 +590,32 @@
                 }
                 
                 if (window.kudosBotShouldStop) break;
-                if (safeClick(btn)) {
+                
+                // Пробуем кликнуть — сначала simulateClick, потом safeClick
+                let clicked = false;
+                try {
+                    simulateClick(btn);
+                    clicked = true;
+                } catch(e) {
+                    try {
+                        btn.click();
+                        clicked = true;
+                    } catch(e2) {}
+                }
+                
+                if (!clicked) {
+                    clicked = safeClick(btn);
+                }
+                
+                if (clicked) {
                     if (actId) window.likedActivities.add(actId);
-                    log('Лайк: ' + athlete);
+                    log('✅ Лайк: ' + athlete);
                     updateStats(athlete);
                     likedInCycle++;
                     totalLiked++;
                     await sleep(Math.max(100, Math.floor(min / 3)));
+                } else {
+                    log('❌ Не удалось кликнуть на лайк');
                 }
             }
             
