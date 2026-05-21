@@ -1,6 +1,6 @@
-// Strakudos Bot v1.7.0 - Club speed settings (slow/medium/fast/ultra)
+// Strakudos Bot v1.7.1 - Fix: realistic click sequence (pointerdown+click), retry, better logging
 (function() {
-    console.log("[KudosBot] Loading bot v1.7.0...");
+    console.log("[KudosBot] Loading bot v1.7.1...");
     if (window.kudosBotRunning) {
         console.log("Бот уже запущен.");
         return;
@@ -258,14 +258,39 @@
     
     function simulateClick(el) {
         try {
-            const event = new MouseEvent('click', {
+            const rect = el.getBoundingClientRect();
+            const x = rect.left + rect.width / 2;
+            const y = rect.top + rect.height / 2;
+            
+            // Полная цепочка событий как у реального пользователя
+            const eventInit = {
                 bubbles: true,
                 cancelable: true,
-                view: window
-            });
-            el.dispatchEvent(event);
+                view: window,
+                clientX: x,
+                clientY: y,
+                screenX: x,
+                screenY: y,
+                pointerType: 'mouse'
+            };
+            
+            // Pointer down
+            el.dispatchEvent(new PointerEvent('pointerdown', eventInit));
+            // Mouse down  
+            el.dispatchEvent(new MouseEvent('mousedown', eventInit));
+            // Pointer up
+            el.dispatchEvent(new PointerEvent('pointerup', eventInit));
+            // Mouse up
+            el.dispatchEvent(new MouseEvent('mouseup', eventInit));
+            // Click
+            el.dispatchEvent(new MouseEvent('click', eventInit));
+            
         } catch(e) {
-            try { el.click(); } catch(e2) {}
+            try { 
+                el.click(); 
+            } catch(e2) {
+                // Fallback
+            }
         }
     }
     
@@ -554,7 +579,8 @@
         let scrollAttempts = 0;
         let lastY = window.scrollY;
         const maxScrolls = 50;
-        const processedCardIds = new Set(); // Используем ID активности, а не DOM-ссылки!
+        // Используем глобальный likedActivities (сохраняется между рестартами бота)
+        const processedCardIds = window.likedActivities;
         
         log('Начинаю лайкать тренировки в клубе...');
         
@@ -667,7 +693,9 @@
                 }
                 
                 const athlete = findAthleteNameFromCard(card);
-                log('Лайкаю: ' + athlete);
+                const btnInfo = kudosBtn.getAttribute('data-testid') || kudosBtn.tagName;
+                const btnRect = kudosBtn.getBoundingClientRect();
+                log('Лайкаю: ' + athlete + ' [кнопка:' + btnInfo + ' размер:' + Math.round(btnRect.width) + 'x' + Math.round(btnRect.height) + ']');
                 
                 // Пауза перед кликом
                 const min = window.kudosMinDelay || 3000;
@@ -680,15 +708,27 @@
                 
                 if (window.kudosBotShouldStop) break;
                 
-                // Кликаем
+                // Кликаем (с retry)
                 let clicked = false;
-                try {
-                    simulateClick(kudosBtn);
-                    clicked = true;
-                } catch(e) {
-                    try { kudosBtn.click(); clicked = true; } catch(e2) {}
+                for (let attempt = 0; attempt < 3 && !clicked; attempt++) {
+                    try {
+                        simulateClick(kudosBtn);
+                        clicked = true;
+                    } catch(e) {
+                        try { kudosBtn.click(); clicked = true; } catch(e2) {}
+                    }
+                    if (!clicked) {
+                        await sleep(500);
+                        // Пере-ищем кнопку (DOM мог измениться)
+                        const freshBtns = card.querySelectorAll('button');
+                        for (const fb of freshBtns) {
+                            if ((fb.getAttribute('data-testid') || '').includes('kudos')) {
+                                kudosBtn = fb;
+                                break;
+                            }
+                        }
+                    }
                 }
-                if (!clicked) clicked = safeClick(kudosBtn);
                 
                 if (clicked) {
                     const actId = getActivityIdFromCard(card);

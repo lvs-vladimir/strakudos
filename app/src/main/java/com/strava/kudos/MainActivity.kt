@@ -141,7 +141,7 @@ class MainActivity : AppCompatActivity() {
                             if (isBotRunning) {
                                 restartBot()
                             }
-                        }, 800)
+                        }, 2000)
                     }
                 } else {
                     tvStatus.text = "ОЖИДАНИЕ ВХОДА"
@@ -299,7 +299,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startBot() {
         val now = System.currentTimeMillis()
-        if (now - lastBotRestartTime < 3000) {
+        if (now - lastBotRestartTime < 8000) {
             Log.d(TAG, "startBot: debounce, skipping")
             return
         }
@@ -372,7 +372,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun restartBot() {
         val now = System.currentTimeMillis()
-        if (now - lastBotRestartTime < 3000) {
+        if (now - lastBotRestartTime < 8000) {
             Log.d(TAG, "restartBot: debounce, skipping (last restart was ${(now - lastBotRestartTime)/1000}s ago)")
             return
         }
