@@ -51,6 +51,67 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
+            <!-- Скорость лайков в клубах -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="СКОРОСТЬ ЛАЙКОВ В КЛУБАХ"
+                android:textColor="#00F0FF"
+                android:textStyle="bold"
+                android:textSize="14sp"
+                android:letterSpacing="0.1"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="12dp" />
+
+            <RadioGroup
+                android:id="@+id/radioClubsSpeed"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#111111"
+                android:padding="12dp">
+
+                <RadioButton
+                    android:id="@+id/radioSlow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Медленно (2-5 сек)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:buttonTint="#00F0FF"
+                    android:paddingVertical="8dp" />
+
+                <RadioButton
+                    android:id="@+id/radioMedium"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Средне (1-2.5 сек)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:buttonTint="#00F0FF"
+                    android:paddingVertical="8dp" />
+
+                <RadioButton
+                    android:id="@+id/radioFast"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Быстро (0.5-1.2 сек)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:buttonTint="#00F0FF"
+                    android:paddingVertical="8dp" />
+
+                <RadioButton
+                    android:id="@+id/radioUltra"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Очень быстро (0.3-0.5 сек)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:buttonTint="#00F0FF"
+                    android:paddingVertical="8dp" />
+            </RadioGroup>
+
             <Button
                 android:id="@+id/btnResetCounter"
                 android:layout_width="match_parent"
@@ -59,7 +120,8 @@
                 android:text="Сбросить счетчик лайков"
                 android:textColor="#FFFFFF"
                 android:textStyle="bold"
-                android:textSize="14sp" />
+                android:textSize="14sp"
+                android:layout_marginTop="32dp" />
         </LinearLayout>
     </ScrollView>
 

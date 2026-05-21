@@ -1,6 +1,6 @@
-// Strakudos Bot v1.5.5 - Display current club name in Android UI
+// Strakudos Bot v1.7.0 - Club speed settings (slow/medium/fast/ultra)
 (function() {
-    console.log("[KudosBot] Loading bot v1.5.5...");
+    console.log("[KudosBot] Loading bot v1.7.0...");
     if (window.kudosBotRunning) {
         console.log("Бот уже запущен.");
         return;
@@ -26,8 +26,25 @@
         if (window.AndroidApp) window.AndroidApp.onKudosGiven(name);
     }
 
+    // Фоновый режим: Chrome замедляет setTimeout в 5-10x
+    // В фоне уменьшаем задержку но НЕ до 0 (чтобы не нагружать CPU на 100%)
     function sleep(ms) {
-        return new Promise(r => setTimeout(r, ms));
+        const isBackground = document.hidden;
+        // Минимальная задержка: 300мс в фоне, иначе WebView зависнет
+        const adjustedMs = isBackground ? Math.max(300, Math.floor(ms / 5)) : ms;
+        return new Promise(resolve => setTimeout(resolve, adjustedMs));
+    }
+
+    // Настройка скорости лайков в клубах
+    function getClubsDelay() {
+        const speed = window.clubsSpeed || 'medium';
+        switch(speed) {
+            case 'slow': return { min: 2000, max: 5000 };
+            case 'medium': return { min: 1000, max: 2500 };
+            case 'fast': return { min: 500, max: 1200 };
+            case 'ultra': return { min: 200, max: 500 };
+            default: return { min: 1000, max: 2500 };
+        }
     }
 
     function saveLiked() {
@@ -541,9 +558,11 @@
         
         log('Начинаю лайкать тренировки в клубе...');
         
+        const speed = getClubsDelay();
+        
         // Скроллим вверх
         window.scrollTo({ top: 0, behavior: 'auto' });
-        await sleep(2000);
+        await sleep(1000);
         
         while (scrollAttempts < maxScrolls && !window.kudosBotShouldStop) {
             // Находим все карточки активностей
@@ -581,7 +600,7 @@
                 
                 // Скроллим к карточке
                 card.scrollIntoView({ behavior: 'auto', block: 'center' });
-                await sleep(1500);
+                await sleep(Math.floor(Math.random() * (speed.max - speed.min)) + speed.min);
                 
                 // Находим кнопку лайка ВНУТРИ этой карточки
                 const buttons = card.querySelectorAll('button');
@@ -643,7 +662,7 @@
                 if (!window.location.pathname.includes('/clubs/')) {
                     log('⚠️ Ушли со страницы клуба, возвращаюсь...');
                     window.location.href = 'https://www.strava.com' + clubUrl + '/recent_activity';
-                    await sleep(5000);
+                    await sleep(2000);
                     return totalLiked;
                 }
                 
@@ -689,7 +708,7 @@
             if (newCardsCount === 0) {
                 log('Все видимые карточки обработаны, прокручиваю вниз...');
                 window.scrollBy({ top: 800, behavior: 'auto' });
-                await sleep(5000);
+                await sleep(2000);
                 scrollAttempts++;
                 
                 if (window.scrollY === lastY) {
@@ -1160,7 +1179,7 @@
         directClick(feedOption.el);
         
         // Ждем пока контент загрузится
-        await sleep(3000);
+        await sleep(1000);
         
         // Проверяем, изменилось ли что-то
         const newScrollY = window.scrollY;
@@ -1310,7 +1329,7 @@
             
             // Кликаем
             directClick(feed.el);
-            await sleep(2500);
+            await sleep(1000);
             
             // Проверяем, изменился ли URL
             if (window.location.href !== beforeUrl) {
@@ -1326,7 +1345,7 @@
             const targetUrl = feed.href.startsWith('http') ? feed.href : 'https://www.strava.com' + feed.href;
             log(`  🌐 Переход по URL: ${targetUrl}`);
             window.location.href = targetUrl;
-            await sleep(4000);
+            await sleep(1500);
             return true;
         }
         
@@ -1348,7 +1367,7 @@
                 localStorage.removeItem('sk_clubs');
             } catch(e) {}
             window.location.href = 'https://www.strava.com/clubs/search';
-            await sleep(3000);
+            await sleep(1000);
             return;
         }
         
@@ -1357,7 +1376,7 @@
             log('Открываю меню навигации...');
             const menuOpened = clickSandwichMenu();
             if (menuOpened) {
-                await sleep(3000);
+                await sleep(1000);
                 
                 // Проверяем, открылось ли меню (ищем пункты меню на странице)
                 const menuItems = document.querySelectorAll('[role="menuitem"], nav a, aside a, [class*="sidebar"] a, [class*="drawer"] a');
@@ -1367,7 +1386,7 @@
                 const menuTexts = ['Клубы', 'Clubs', 'Мои клубы', 'My Clubs', 'Your Clubs'];
                 if (clickMenuItemByText(menuTexts)) {
                     log('Кликнул на пункт Клубы, жду перехода...');
-                    await sleep(5000);
+                    await sleep(2000);
                     
                     // Проверяем, изменился ли URL
                     if (window.location.pathname.startsWith('/clubs')) {
@@ -1387,7 +1406,7 @@
             // Fallback: прямой переход
             log('Прямой переход на /clubs/search...');
             window.location.href = 'https://www.strava.com/clubs/search';
-            await sleep(5000);
+            await sleep(2000);
             return;
         }
         
@@ -1441,7 +1460,7 @@
                     
                     // Прокручиваем вниз для загрузки еще
                     window.scrollBy({ top: 800, behavior: 'auto' });
-                    await sleep(3000);
+                    await sleep(1000);
                     scrollAttempts++;
                     
                     // Проверяем, изменился ли скролл
@@ -1460,7 +1479,7 @@
             // Если список пуст — ждем и пробуем снова
             if (clubs.length === 0) {
                 log('Клубы не найдены. Жду 10с и пробую снова...');
-                await sleep(10000);
+                await sleep(3000);
                 return;
             }
             
@@ -1502,7 +1521,7 @@
                 // ВСЕГДА прямой переход — надежнее чем клик по ссылке на скроллящейся странице
                 log('Прямой переход в клуб: ' + nextClub);
                 window.location.href = 'https://www.strava.com' + nextClub;
-                await sleep(5000);
+                await sleep(2000);
                 return;
             } else {
                 log('Все клубы пройдены! Сбрасываю и начинаю заново.');
@@ -1523,7 +1542,7 @@
             if (clubId === 'search' || clubId === 'join' || clubId === 'create' || clubId === 'new') {
                 log('На системной странице /clubs/' + clubId + ', пропускаю');
                 window.location.href = 'https://www.strava.com/clubs/search';
-                await sleep(3000);
+                await sleep(1000);
                 return;
             }
             const clubUrl = '/clubs/' + clubId;
@@ -1554,7 +1573,7 @@
             
             // Даем React время отрендерить DOM
             log('Жду загрузку DOM клуба...');
-            await sleep(3000);
+            await sleep(1000);
             
             // Проверяем URL — если не /recent_activity, нужно кликнуть вкладку
             if (!window.location.pathname.includes('/recent_activity')) {
@@ -1565,7 +1584,7 @@
                 if (tab) {
                     log('Кликаю на вкладку: [' + tab.textContent.trim() + ']');
                     simulateClick(tab);
-                    await sleep(5000);
+                    await sleep(2000);
                     // После клика страница загрузит /recent_activity, бот рестартует
                     return;
                 }
@@ -1573,7 +1592,7 @@
                 // Fallback: прямой переход на /recent_activity
                 log('Вкладка не найдена, прямой переход на /recent_activity');
                 window.location.href = 'https://www.strava.com' + clubUrl + '/recent_activity';
-                await sleep(5000);
+                await sleep(2000);
                 return;
             }
             
@@ -1621,7 +1640,7 @@
                 }
                 
                 // Пауза между циклами
-                await sleep(3000);
+                await sleep(1000);
             }
             
             return;
@@ -1757,7 +1776,7 @@
                     log("🔄 Возвращаюсь в начало...");
                     await scrollToTop();
                     noProgress = 0;
-                    await sleep(3000);
+                    await sleep(1000);
                 }
             } else {
                 noProgress = 0;

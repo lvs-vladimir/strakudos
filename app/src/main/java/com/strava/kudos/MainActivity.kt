@@ -105,6 +105,9 @@ class MainActivity : AppCompatActivity() {
         // Отключаем кэш чтобы всегда загружать свежий bot.js
         settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
         
+        // Аппаратное ускорение для WebView
+        webView.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+        
         settings.userAgentString = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
 
         CookieManager.getInstance().setAcceptCookie(true)
@@ -132,13 +135,13 @@ class MainActivity : AppCompatActivity() {
                     btnToggle.isEnabled = true
                     btnToggle.alpha = 1.0f
                     if (isBotRunning) {
-                        Log.d(TAG, "Feed page loaded, bot was running, will restart in 2s...")
+                        Log.d(TAG, "Feed page loaded: url=$url, bot was running, will restart...")
                         // Даем React-приложению время отрендерить контент перед запуском бота
                         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                             if (isBotRunning) {
                                 restartBot()
                             }
-                        }, 3000)
+                        }, 800)
                     }
                 } else {
                     tvStatus.text = "ОЖИДАНИЕ ВХОДА"
@@ -197,8 +200,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         Log.d(TAG, "onResume called")
-        webView.onResume()
-        webView.resumeTimers()
+        // НЕ вызываем webView.onResume() — WebView не был в onPause()
         // Останавливаем фоновый wake (мы снова на переднем плане)
         stopBackgroundWebViewWake()
         
@@ -229,49 +231,27 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         Log.d(TAG, "onPause called, isBotRunning=$isBotRunning")
-        // Если бот работает, НЕ останавливаем WebView — он должен работать в фоне
-        if (!isBotRunning) {
-            webView.onPause()
-            webView.pauseTimers()
-        } else {
-            // Бот работает — запускаем periodic wake чтобы WebView не засыпал
-            startBackgroundWebViewWake()
+        // НЕ вызываем webView.onPause() — это ЗАМОРАЖИВАЕТ JavaScript!
+        // Даже если бот не работает — не замораживаем WebView
+        // Chrome в фоне сам замедляет timers, но не полностью останавляет
+        if (isBotRunning) {
+            Log.d(TAG, "onPause: bot running, NOT pausing WebView")
         }
     }
 
     override fun onStop() {
         super.onStop()
         Log.d(TAG, "onStop called")
-        // Если бот работает — удерживаем WebView активным
-        if (isBotRunning) {
-            startBackgroundWebViewWake()
-        }
+        // НЕ вызываем webView.onPause() здесь!
     }
 
+    // Background wake больше не нужен — мы не вызываем webView.onPause()
     private fun startBackgroundWebViewWake() {
-        stopBackgroundWebViewWake()
-        backgroundRunnable = object : Runnable {
-            override fun run() {
-                if (isBotRunning) {
-                    Log.d(TAG, "Background wake: webView.onResume()")
-                    webView.onResume()
-                    webView.resumeTimers()
-                    // Также будим JavaScript
-                    webView.evaluateJavascript("if(window.kudosBotRunning) { console.log('[BG] WebView wake'); }", null)
-                    backgroundHandler.postDelayed(this, 2000)
-                }
-            }
-        }
-        backgroundHandler.post(backgroundRunnable!!)
-        Log.d(TAG, "Background WebView wake started")
+        Log.d(TAG, "Background wake: not needed (no webView.onPause)")
     }
 
     private fun stopBackgroundWebViewWake() {
-        backgroundRunnable?.let {
-            backgroundHandler.removeCallbacks(it)
-            Log.d(TAG, "Background WebView wake stopped")
-        }
-        backgroundRunnable = null
+        Log.d(TAG, "Background wake: nothing to stop")
     }
 
     override fun onDestroy() {
@@ -289,8 +269,7 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, "onSaveInstanceState called")
         // Сохраняем URL на случай если система уничтожит Activity
         outState.putString("last_url", webView.url)
-        // Сохраняем состояние WebView (история, скролл и т.д.)
-        webView.saveState(outState)
+        // НЕ сохраняем состояние WebView — это может вызывать проблемы в фоне
     }
 
     override fun onRestoreInstanceState(savedInstanceState: Bundle) {
@@ -335,10 +314,12 @@ class MainActivity : AppCompatActivity() {
         webView.clearCache(true)
         webView.settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
         
-        webView.evaluateJavascript("window.kudosMinDelay = $minMs; window.kudosMaxDelay = $maxMs; window.kudosStrategy = '$strategy';", null)
-
-        val botScript = readAssetFile("bot.js")
+        // Встраиваем параметры напрямую в скрипт (надежнее чем window-переменные)
+        var botScript = readAssetFile("bot.js")
         if (botScript.isNotEmpty()) {
+            val clubsSpeed = sharedPref.getString("clubs_speed", "medium") ?: "medium"
+            botScript = botScript.replace("const STRATEGY = window.kudosStrategy || 'smart';", "const STRATEGY = '$strategy';")
+            webView.evaluateJavascript("window.kudosMinDelay = $minMs; window.kudosMaxDelay = $maxMs; window.clubsSpeed = '$clubsSpeed';", null)
             webView.evaluateJavascript(botScript, null)
             isBotRunning = true
             with(sharedPref.edit()) {
@@ -351,6 +332,10 @@ class MainActivity : AppCompatActivity() {
             touchOverlay.visibility = android.view.View.VISIBLE
             tvStatus.text = "РАБОТАЕТ"
             tvStatus.setTextColor(android.graphics.Color.parseColor("#00F0FF"))
+            
+            // Держим экран включенным чтобы WebView не засыпал
+            webView.setKeepScreenOn(true)
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             
             // Запускаем Foreground Service для работы в фоне
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -377,13 +362,17 @@ class MainActivity : AppCompatActivity() {
         tvStatus.text = "ОСТАНОВЛЕН"
         tvStatus.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
         
+        // Снимаем keep screen on
+        webView.setKeepScreenOn(false)
+        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        
         // Останавливаем сервис
         stopService(Intent(this, KudosService::class.java))
     }
 
     private fun restartBot() {
         val now = System.currentTimeMillis()
-        if (now - lastBotRestartTime < 8000) {
+        if (now - lastBotRestartTime < 3000) {
             Log.d(TAG, "restartBot: debounce, skipping (last restart was ${(now - lastBotRestartTime)/1000}s ago)")
             return
         }
@@ -399,16 +388,18 @@ class MainActivity : AppCompatActivity() {
         webView.clearCache(true)
         webView.settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
         
-        webView.evaluateJavascript("window.kudosMinDelay = $minMs; window.kudosMaxDelay = $maxMs; window.kudosStrategy = '$strategy';", null)
-        
         // Для страниц клуба даем React время отрендерить DOM
-        val delayMs = if (webView.url?.contains("/clubs/") == true) 2500L else 500L
+        val delayMs = if (webView.url?.contains("/clubs/") == true) 800L else 300L
         
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            val botScript = readAssetFile("bot.js")
+            // Встраиваем параметры напрямую в скрипт (надежнее чем window-переменные)
+            var botScript = readAssetFile("bot.js")
             if (botScript.isNotEmpty()) {
+                botScript = botScript.replace("const STRATEGY = window.kudosStrategy || 'smart';", "const STRATEGY = '$strategy';")
+                val clubsSpeed = sharedPref.getString("clubs_speed", "medium") ?: "medium"
+                webView.evaluateJavascript("window.kudosMinDelay = $minMs; window.kudosMaxDelay = $maxMs; window.clubsSpeed = '$clubsSpeed';", null)
                 webView.evaluateJavascript(botScript, null)
-                Log.d(TAG, "restartBot: bot.js injected after ${delayMs}ms delay")
+                Log.d(TAG, "restartBot: bot.js injected after ${delayMs}ms delay with strategy=$strategy")
             }
         }, delayMs)
         
