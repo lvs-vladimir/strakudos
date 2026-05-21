@@ -8,6 +8,8 @@ import android.content.IntentFilter
 import android.os.Build
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
@@ -28,6 +30,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var tvStatus: TextView
     private lateinit var tvStats: TextView
+    private val backgroundHandler = Handler(Looper.getMainLooper())
+    private var backgroundRunnable: Runnable? = null
     private lateinit var tvStrategy: TextView
     private lateinit var btnToggle: Button
     private lateinit var touchOverlay: android.view.View
@@ -38,6 +42,7 @@ class MainActivity : AppCompatActivity() {
     private var kudosCount = 0
     private var isBotRunning = false
     private var lastBotRestartTime = 0L
+    private var currentClubName: String = ""
 
     private val serviceStopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -194,6 +199,9 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, "onResume called")
         webView.onResume()
         webView.resumeTimers()
+        // Останавливаем фоновый wake (мы снова на переднем плане)
+        stopBackgroundWebViewWake()
+        
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
         val strategy = sharedPref.getString("strategy", "smart") ?: "smart"
         updateStrategyText(strategy)
@@ -225,12 +233,45 @@ class MainActivity : AppCompatActivity() {
         if (!isBotRunning) {
             webView.onPause()
             webView.pauseTimers()
+        } else {
+            // Бот работает — запускаем periodic wake чтобы WebView не засыпал
+            startBackgroundWebViewWake()
         }
     }
 
     override fun onStop() {
         super.onStop()
         Log.d(TAG, "onStop called")
+        // Если бот работает — удерживаем WebView активным
+        if (isBotRunning) {
+            startBackgroundWebViewWake()
+        }
+    }
+
+    private fun startBackgroundWebViewWake() {
+        stopBackgroundWebViewWake()
+        backgroundRunnable = object : Runnable {
+            override fun run() {
+                if (isBotRunning) {
+                    Log.d(TAG, "Background wake: webView.onResume()")
+                    webView.onResume()
+                    webView.resumeTimers()
+                    // Также будим JavaScript
+                    webView.evaluateJavascript("if(window.kudosBotRunning) { console.log('[BG] WebView wake'); }", null)
+                    backgroundHandler.postDelayed(this, 2000)
+                }
+            }
+        }
+        backgroundHandler.post(backgroundRunnable!!)
+        Log.d(TAG, "Background WebView wake started")
+    }
+
+    private fun stopBackgroundWebViewWake() {
+        backgroundRunnable?.let {
+            backgroundHandler.removeCallbacks(it)
+            Log.d(TAG, "Background WebView wake stopped")
+        }
+        backgroundRunnable = null
     }
 
     override fun onDestroy() {
@@ -265,13 +306,13 @@ class MainActivity : AppCompatActivity() {
         moveTaskToBack(true)
     }
 
-    private fun updateStrategyText(strategy: String) {
+    private fun updateStrategyText(strategy: String, clubName: String = currentClubName) {
         val strategyName = when (strategy) {
             "smart" -> "УМНАЯ"
             "top_only" -> "ТОЛЬКО НОВЫЕ"
             "aggressive" -> "АГРЕССИВНАЯ"
             "human" -> "ЧЕЛОВЕЧНАЯ"
-            "clubs" -> "КЛУБЫ"
+            "clubs" -> if (clubName.isNotEmpty()) "КЛУБЫ ($clubName)" else "КЛУБЫ"
             else -> "УМНАЯ"
         }
         tvStrategy.text = strategyName
@@ -342,26 +383,34 @@ class MainActivity : AppCompatActivity() {
 
     private fun restartBot() {
         val now = System.currentTimeMillis()
-        if (now - lastBotRestartTime < 5000) {
+        if (now - lastBotRestartTime < 8000) {
             Log.d(TAG, "restartBot: debounce, skipping (last restart was ${(now - lastBotRestartTime)/1000}s ago)")
             return
         }
         lastBotRestartTime = now
         Log.d(TAG, "restartBot called")
+        
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
         val minMs = sharedPref.getInt("min_delay", 5000)
         val maxMs = sharedPref.getInt("max_delay", 12000)
         val strategy = sharedPref.getString("strategy", "smart") ?: "smart"
+        
         // Очищаем кэш WebView чтобы загрузить свежий bot.js
         webView.clearCache(true)
         webView.settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
         
         webView.evaluateJavascript("window.kudosMinDelay = $minMs; window.kudosMaxDelay = $maxMs; window.kudosStrategy = '$strategy';", null)
         
-        val botScript = readAssetFile("bot.js")
-        if (botScript.isNotEmpty()) {
-            webView.evaluateJavascript(botScript, null)
-        }
+        // Для страниц клуба даем React время отрендерить DOM
+        val delayMs = if (webView.url?.contains("/clubs/") == true) 2500L else 500L
+        
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            val botScript = readAssetFile("bot.js")
+            if (botScript.isNotEmpty()) {
+                webView.evaluateJavascript(botScript, null)
+                Log.d(TAG, "restartBot: bot.js injected after ${delayMs}ms delay")
+            }
+        }, delayMs)
         
         // Восстанавливаем UI и запускаем сервис (на случай если Activity была пересоздана)
         touchOverlay.visibility = android.view.View.VISIBLE
@@ -412,6 +461,18 @@ class MainActivity : AppCompatActivity() {
                     putInt("kudos_count", kudosCount)
                     apply()
                 }
+            }
+        }
+
+        @JavascriptInterface
+        fun setClubName(clubName: String) {
+            runOnUiThread {
+                currentClubName = clubName
+                Log.d(TAG, "Club name updated: $clubName")
+                // Обновляем отображение стратегии с именем клуба
+                val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
+                val strategy = sharedPref.getString("strategy", "smart") ?: "smart"
+                updateStrategyText(strategy, clubName)
             }
         }
     }

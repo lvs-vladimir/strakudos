@@ -1,6 +1,6 @@
-// Strakudos Bot v1.4.8 - Fix getClubLinksFromPage: match text slugs like /clubs/wildsiberia
+// Strakudos Bot v1.5.5 - Display current club name in Android UI
 (function() {
-    console.log("[KudosBot] Loading bot v1.4.8...");
+    console.log("[KudosBot] Loading bot v1.5.5...");
     if (window.kudosBotRunning) {
         console.log("Бот уже запущен.");
         return;
@@ -391,8 +391,8 @@
             const match = href.match(/\/clubs\/([a-zA-Z0-9_-]+)/);
             if (match) {
                 const clubSlug = match[1];
-                // Исключаем системные пути
-                if (clubSlug === 'search' || clubSlug === 'join' || clubSlug === 'create') continue;
+                // Исключаем системные пути (создать, поиск, присоединиться)
+                if (clubSlug === 'search' || clubSlug === 'join' || clubSlug === 'create' || clubSlug === 'new') continue;
                 if (!seen.has(clubSlug)) {
                     seen.add(clubSlug);
                     clubs.push('/clubs/' + clubSlug);
@@ -408,8 +408,9 @@
     
     function findActivityTab() {
         const tabTexts = [
-            'Recent Activity', 'Последняя тренировка', 'Recent', 'Activity',
-            'Тренировки', 'Activities', 'Лента', 'Feed', 'Club Feed', 'Последние'
+            'Recent Activity', 'Последняя тренировка', 'Недавняя активность', 'Активность клуба',
+            'Recent', 'Activity', 'Активность', 'Тренировки', 'Activities',
+            'Лента', 'Feed', 'Club Feed', 'Лента клуба', 'Последние'
         ];
         
         const selectors = [
@@ -420,15 +421,19 @@
             '.tabs a',
             '.tab',
             'nav a',
-            '[class*="tab"]'
+            '[class*="tab"]',
+            'button[class*="tab"]',
+            '[role="button"]'
         ];
         
         for (const sel of selectors) {
             const tabs = document.querySelectorAll(sel);
+            log('findActivityTab: по селектору ' + sel + ' найдено ' + tabs.length + ' элементов');
             for (const tab of tabs) {
                 const text = (tab.textContent || '').trim();
                 for (const search of tabTexts) {
                     if (text.toLowerCase().includes(search.toLowerCase())) {
+                        log('findActivityTab: нашел вкладку [' + text + '] по селектору ' + sel);
                         return tab;
                     }
                 }
@@ -436,11 +441,13 @@
         }
         
         // Fallback: ищем по всем элементам
+        log('findActivityTab: fallback — ищу по всем элементам...');
         const all = document.querySelectorAll('a, button, [role="tab"], div, span');
         for (const el of all) {
             const text = (el.textContent || '').trim();
             for (const search of tabTexts) {
                 if (text.toLowerCase().includes(search.toLowerCase())) {
+                    log('findActivityTab: fallback нашел [' + text + ']');
                     return el;
                 }
             }
@@ -516,6 +523,12 @@
     function goToNextClub() {
         // Не инкрементируем здесь — это делается в основном цикле
         log('Возвращаюсь к списку клубов...');
+        // Очищаем имя клуба в Android (уходим со страницы клуба)
+        try {
+            if (typeof AndroidApp !== 'undefined' && AndroidApp.setClubName) {
+                AndroidApp.setClubName("");
+            }
+        } catch(e) {}
         window.location.href = 'https://www.strava.com/clubs/search';
     }
     
@@ -1326,6 +1339,19 @@
         
         const url = window.location.pathname;
         
+        // Проверка системных страниц - сброс и редирект
+        if (url === '/clubs/new' || url === '/clubs/create' || url === '/clubs/join') {
+            log('На системной странице ' + url + ', сбрасываю данные и перехожу на поиск');
+            try {
+                localStorage.removeItem('sk_visited');
+                localStorage.removeItem('sk_index');
+                localStorage.removeItem('sk_clubs');
+            } catch(e) {}
+            window.location.href = 'https://www.strava.com/clubs/search';
+            await sleep(3000);
+            return;
+        }
+        
         // === ФАЗА 1: Нужно открыть меню и перейти в Клубы ===
         if (!url.startsWith('/clubs')) {
             log('Открываю меню навигации...');
@@ -1385,40 +1411,48 @@
             
             let currentIndex = parseInt(localStorage.getItem('sk_index') || '0');
             
-            // Собираем клубы со страницы (с прокруткой для infinite scroll)
-            let scrollAttempts = 0;
-            let lastScrollY = window.scrollY;
-            const maxScrollAttempts = 20;
+            // Проверяем — есть ли уже список клубов с непосещенными?
+            const hasUnvisited = clubs.length > 0 && clubs.some(c => !visitedSet.has(c));
             
-            while (scrollAttempts < maxScrollAttempts) {
-                const found = getClubLinksFromPage();
-                let newClubsFound = 0;
+            if (!hasUnvisited) {
+                // Нужно собрать/обновить список — скроллим
+                log('Собираю клубы со страницы...');
+                let scrollAttempts = 0;
+                let lastScrollY = window.scrollY;
+                const maxScrollAttempts = 20;
                 
-                if (found.length > 0) {
-                    for (const club of found) {
-                        if (!clubs.includes(club)) {
-                            clubs.push(club);
-                            newClubsFound++;
+                while (scrollAttempts < maxScrollAttempts) {
+                    const found = getClubLinksFromPage();
+                    let newClubsFound = 0;
+                    
+                    if (found.length > 0) {
+                        for (const club of found) {
+                            if (!clubs.includes(club)) {
+                                clubs.push(club);
+                                newClubsFound++;
+                            }
+                        }
+                        
+                        if (newClubsFound > 0) {
+                            localStorage.setItem('sk_clubs', JSON.stringify(clubs));
+                            log('Найдено новых клубов: ' + newClubsFound + ', всего: ' + clubs.length);
                         }
                     }
                     
-                    if (newClubsFound > 0) {
-                        localStorage.setItem('sk_clubs', JSON.stringify(clubs));
-                        log('Найдено новых клубов: ' + newClubsFound + ', всего: ' + clubs.length);
+                    // Прокручиваем вниз для загрузки еще
+                    window.scrollBy({ top: 800, behavior: 'auto' });
+                    await sleep(3000);
+                    scrollAttempts++;
+                    
+                    // Проверяем, изменился ли скролл
+                    if (window.scrollY === lastScrollY) {
+                        log('Конец списка клубов (скролл не изменился)');
+                        break;
                     }
+                    lastScrollY = window.scrollY;
                 }
-                
-                // Прокручиваем вниз для загрузки еще
-                window.scrollBy({ top: 800, behavior: 'auto' });
-                await sleep(3000);
-                scrollAttempts++;
-                
-                // Проверяем, изменился ли скролл
-                if (window.scrollY === lastScrollY) {
-                    log('Конец списка клубов (скролл не изменился)');
-                    break;
-                }
-                lastScrollY = window.scrollY;
+            } else {
+                log('Список клубов уже есть (' + clubs.length + '), пропускаю скролл');
             }
             
             log('Всего клубов в списке: ' + clubs.length);
@@ -1465,15 +1499,9 @@
                 log('Перехожу в клуб #' + (currentIndex + 1) + ' из ' + clubs.length + ': ' + nextClub);
                 localStorage.setItem('sk_index', currentIndex.toString());
                 
-                // Ищем ссылку на странице
-                const link = document.querySelector('a[href="' + nextClub + '"]');
-                if (link) {
-                    log('Кликаю на ссылку клуба на странице');
-                    simulateClick(link);
-                } else {
-                    log('Ссылка не найдена на странице, прямой переход');
-                    window.location.href = 'https://www.strava.com' + nextClub;
-                }
+                // ВСЕГДА прямой переход — надежнее чем клик по ссылке на скроллящейся странице
+                log('Прямой переход в клуб: ' + nextClub);
+                window.location.href = 'https://www.strava.com' + nextClub;
                 await sleep(5000);
                 return;
             } else {
@@ -1488,11 +1516,24 @@
         }
         
         // === ФАЗА 3: На странице конкретного клуба /clubs/XXX ===
-        const clubMatch = url.match(/\/clubs\/(\d+)/);
+        const clubMatch = url.match(/\/clubs\/([a-zA-Z0-9_-]+)/);
         if (clubMatch) {
             const clubId = clubMatch[1];
+            // Пропускаем системные пути
+            if (clubId === 'search' || clubId === 'join' || clubId === 'create' || clubId === 'new') {
+                log('На системной странице /clubs/' + clubId + ', пропускаю');
+                window.location.href = 'https://www.strava.com/clubs/search';
+                await sleep(3000);
+                return;
+            }
             const clubUrl = '/clubs/' + clubId;
             log('В клубе #' + clubId);
+            // Передаем имя клуба в Android
+            try {
+                if (typeof AndroidApp !== 'undefined' && AndroidApp.setClubName) {
+                    AndroidApp.setClubName(clubId);
+                }
+            } catch(e) {}
             
             // Отмечаем как посещенный
             let visited = [];
@@ -1504,6 +1545,16 @@
                 visited.push(clubUrl);
                 localStorage.setItem('sk_visited', JSON.stringify(visited));
             }
+            
+            // Инкрементируем индекс для следующего выбора (чтобы не заходить в тот же клуб)
+            let currentIdx = parseInt(localStorage.getItem('sk_index') || '0');
+            currentIdx = (currentIdx + 1); // Просто инкремент, корректировка произойдет в Фазе 2
+            localStorage.setItem('sk_index', currentIdx.toString());
+            log('Инкрементировал sk_index до ' + currentIdx + ' для следующего клуба');
+            
+            // Даем React время отрендерить DOM
+            log('Жду загрузку DOM клуба...');
+            await sleep(3000);
             
             // Проверяем URL — если не /recent_activity, нужно кликнуть вкладку
             if (!window.location.pathname.includes('/recent_activity')) {
@@ -1770,6 +1821,12 @@
         
         log("Автоматизация остановлена.");
         window.kudosBotRunning = false;
+        // Очищаем имя клуба в Android
+        try {
+            if (typeof AndroidApp !== 'undefined' && AndroidApp.setClubName) {
+                AndroidApp.setClubName("");
+            }
+        } catch(e) {}
     }
 
     startLoop();
