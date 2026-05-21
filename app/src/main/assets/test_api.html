@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Strava API Test</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            background: #000; 
+            color: #fff;
+            font-size: 14px;
+        }
+        .log { 
+            background: #111; 
+            padding: 10px; 
+            margin: 5px 0; 
+            border-radius: 5px; 
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+        }
+        .success { color: #0f0; }
+        .error { color: #f00; }
+        .warning { color: #ff0; }
+        button { 
+            padding: 10px 20px; 
+            margin: 5px; 
+            cursor: pointer;
+            background: #FC5200;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        input {
+            padding: 5px;
+            margin: 5px;
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Strava API Test</h1>
+    <p>Открой strava.com в этом же WebView, залогинься, затем запусти тесты</p>
+    
+    <div>
+        <label>Activity ID: <input type="text" id="activityId" placeholder="12345678"></label>
+    </div>
+    
+    <button onclick="runAllTests()">Запустить все тесты</button>
+    <button onclick="document.getElementById('logs').innerHTML=''">Очистить</button>
+    
+    <div id="logs"></div>
+
+    <script>
+        // Api-Key из декомпилированного APK
+        const STRAVA_API_KEY = '0aeb41212aef4bddb762dd34c45e941f';
+
+        function log(message, type = 'info') {
+            const div = document.getElementById('logs');
+            const entry = document.createElement('div');
+            entry.className = 'log ' + type;
+            entry.textContent = new Date().toLocaleTimeString() + ' ' + message;
+            div.appendChild(entry);
+        }
+
+        // Получаем athleteId из разных источников
+        function findAthleteId() {
+            // 1. Из cookies
+            const cookies = ['strava_remember_token', 'strava_remember_id', '_strava4_session'];
+            for (const name of cookies) {
+                const match = document.cookie.match(new RegExp(name + '=([^;]+)'));
+                if (match) {
+                    log('Найден cookie ' + name + ': ' + match[1].substring(0, 30) + '...', 'success');
+                    if (name === 'strava_remember_token') {
+                        const parts = match[1].split('_');
+                        if (parts.length >= 2) {
+                            log('Извлечен athleteId из token: ' + parts[1], 'success');
+                            return parts[1];
+                        }
+                    }
+                    return match[1];
+                }
+            }
+            
+            // 2. Из HTML
+            const html = document.documentElement.innerHTML;
+            const matches = [
+                html.match(/"athlete_id":(\d+)/),
+                html.match(/"current_user_id":(\d+)/),
+                html.match(/"user_id":(\d+)/),
+                html.match(/athlete\/([\d]+)/)
+            ];
+            for (const m of matches) {
+                if (m) {
+                    log('Найден athleteId в HTML: ' + m[1], 'success');
+                    return m[1];
+                }
+            }
+            
+            log('AthleteId не найден! Ты залогинен в Strava?', 'error');
+            return null;
+        }
+
+        // Тест API endpoint
+        async function testAPI(url, method, headers = {}, body = null, description = '') {
+            log('');
+            log('=== ' + description + ' ===');
+            log(method + ' ' + url);
+            
+            try {
+                const options = {
+                    method: method,
+                    credentials: 'include',
+                    headers: {
+                        'Accept': 'application/json',
+                        ...headers
+                    }
+                };
+                if (body) {
+                    options.headers['Content-Type'] = 'application/json';
+                    options.body = body;
+                }
+                
+                const response = await fetch(url, options);
+                const text = await response.text();
+                
+                log('HTTP Status: ' + response.status, response.ok ? 'success' : 'error');
+                log('Response: ' + text.substring(0, 300));
+                
+                return { status: response.status, ok: response.ok, text: text };
+            } catch(e) {
+                log('Ошибка: ' + e.message, 'error');
+                return { error: e.message };
+            }
+        }
+
+        // Тест 1: API v3 простой PUT с cookies
+        async function test1(activityId) {
+            return await testAPI(
+                'https://www.strava.com/api/v3/activities/' + activityId + '/kudos',
+                'PUT',
+                {},
+                null,
+                'Тест 1: API v3 PUT с cookies (без Api-Key)'
+            );
+        }
+
+        // Тест 2: API v3 с Api-Key
+        async function test2(activityId) {
+            return await testAPI(
+                'https://www.strava.com/api/v3/activities/' + activityId + '/kudos',
+                'PUT',
+                { 'Api-Key': STRAVA_API_KEY },
+                null,
+                'Тест 2: API v3 PUT с Api-Key'
+            );
+        }
+
+        // Тест 3: Web endpoint POST
+        async function test3(activityId) {
+            return await testAPI(
+                'https://www.strava.com/activities/' + activityId + '/kudos',
+                'POST',
+                {},
+                null,
+                'Тест 3: Web endpoint POST'
+            );
+        }
+
+        // Тест 4: GraphQL mutation
+        async function test4(activityId) {
+            const query = `
+                mutation KudosActivity($activityId: ID!) {
+                    kudosActivity(activityId: $activityId) {
+                        id
+                        hasKudoed
+                        kudosCount
+                    }
+                }
+            `;
+            return await testAPI(
+                'https://www.strava.com/graphql',
+                'POST',
+                {},
+                JSON.stringify({
+                    operationName: 'KudosActivity',
+                    variables: { activityId: activityId.toString() },
+                    query: query
+                }),
+                'Тест 4: GraphQL mutation'
+            );
+        }
+
+        // Тест 5: API v3 с X-Requested-With
+        async function test5(activityId) {
+            return await testAPI(
+                'https://www.strava.com/api/v3/activities/' + activityId + '/kudos',
+                'PUT',
+                { 
+                    'Api-Key': STRAVA_API_KEY,
+                    'X-Requested-With': 'com.strava'
+                },
+                null,
+                'Тест 5: API v3 PUT с X-Requested-With'
+            );
+        }
+
+        // Тест 6: Текущий DOM клик
+        async function test6() {
+            log('');
+            log('=== Тест 6: DOM клик на первой кнопке лайка ===');
+            
+            const buttons = document.querySelectorAll('[data-testid="kudos_button"], [data-testid="un-kudos_button"]');
+            if (buttons.length === 0) {
+                log('Кнопки лайка не найдены на странице!', 'error');
+                return;
+            }
+            
+            const btn = buttons[0];
+            log('Найдено кнопок: ' + buttons.length);
+            log('Кликаю на первую...');
+            
+            // Реалистичный клик
+            const rect = btn.getBoundingClientRect();
+            const x = rect.left + rect.width / 2;
+            const y = rect.top + rect.height / 2;
+            
+            ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(type => {
+                btn.dispatchEvent(new MouseEvent(type, {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    clientX: x,
+                    clientY: y
+                }));
+            });
+            
+            log('Клик выполнен! Проверь UI счетчик.', 'success');
+        }
+
+        // Запуск всех тестов
+        async function runAllTests() {
+            document.getElementById('logs').innerHTML = '';
+            
+            const activityId = document.getElementById('activityId').value.trim();
+            if (!activityId) {
+                log('Введи Activity ID!', 'error');
+                return;
+            }
+            
+            log('Запуск тестов для Activity ID: ' + activityId);
+            log('Athlete ID: ' + (findAthleteId() || 'не найден'));
+            log('');
+            
+            await test1(activityId);
+            await new Promise(r => setTimeout(r, 2000));
+            
+            await test2(activityId);
+            await new Promise(r => setTimeout(r, 2000));
+            
+            await test3(activityId);
+            await new Promise(r => setTimeout(r, 2000));
+            
+            await test4(activityId);
+            await new Promise(r => setTimeout(r, 2000));
+            
+            await test5(activityId);
+            await new Promise(r => setTimeout(r, 2000));
+            
+            await test6();
+            
+            log('');
+            log('=== Тесты завершены ===');
+        }
+    </script>
+</body>
+</html>

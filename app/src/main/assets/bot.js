@@ -1,6 +1,34 @@
-// Strakudos Bot v1.7.1 - Fix: realistic click sequence (pointerdown+click), retry, better logging
+// Strakudos Bot v1.7.3 - Fix: remove restartBot from onPageFinished, only onResume
 (function() {
-    console.log("[KudosBot] Loading bot v1.7.1...");
+    console.log("[KudosBot] Loading bot v1.8.9...");
+    
+    // Перехватчик fetch — исследуем как Strava отправляет лайки
+    const origFetch = window.fetch;
+    window.fetch = function(...args) {
+        const url = args[0] || '';
+        const opts = args[1] || {};
+        const method = opts.method || 'GET';
+        if (method !== 'GET' && (url.includes('kudos') || url.includes('graphql') || url.includes('athlete') || url.includes('activity'))) {
+            console.log('[KudosAPI] fetch ' + method + ' ' + url, JSON.stringify(opts.body || '').substring(0, 500));
+        }
+        return origFetch.apply(this, args);
+    };
+    
+    // Перехватчик XMLHttpRequest
+    const origOpen = XMLHttpRequest.prototype.open;
+    const origSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+        this._url = url;
+        this._method = method;
+        return origOpen.call(this, method, url, ...rest);
+    };
+    XMLHttpRequest.prototype.send = function(body) {
+        if (this._url && (this._url.includes('kudos') || this._url.includes('graphql'))) {
+            console.log('[KudosAPI] XHR ' + this._method + ' ' + this._url, JSON.stringify(body || '').substring(0, 500));
+        }
+        return origSend.call(this, body);
+    };
+    
     if (window.kudosBotRunning) {
         console.log("Бот уже запущен.");
         return;
@@ -27,12 +55,24 @@
     }
 
     // Фоновый режим: Chrome замедляет setTimeout в 5-10x
-    // В фоне уменьшаем задержку но НЕ до 0 (чтобы не нагружать CPU на 100%)
+    let __sleepResolve = null;
+    window.__wakeBot = function() {
+        if (__sleepResolve) {
+            const r = __sleepResolve;
+            __sleepResolve = null;
+            r();
+        }
+    };
+
+    // В фоне Chrome троттлит/замораживает setTimeout.
+    // Вместо этого ждем пока Android вызовет __wakeBot() через evaluateJavascript.
     function sleep(ms) {
         const isBackground = document.hidden;
-        // Минимальная задержка: 300мс в фоне, иначе WebView зависнет
-        const adjustedMs = isBackground ? Math.max(300, Math.floor(ms / 5)) : ms;
-        return new Promise(resolve => setTimeout(resolve, adjustedMs));
+        if (!isBackground) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+        // Фон: не используем setTimeout — ждем внешнего wake от Android
+        return new Promise(resolve => { __sleepResolve = resolve; });
     }
 
     // Настройка скорости лайков в клубах
@@ -208,6 +248,44 @@
             
             const athlete = findAthleteName(btn);
             log(`Лайкаю: ${athlete}`);
+            
+            // API v3 режим — ставим лайк через REST API вместо кликов
+            if (window.useApiV3 && actId) {
+                const min = window.kudosMinDelay || 3000;
+                const max = window.kudosMaxDelay || 8000;
+                const delay = Math.floor(Math.random() * Math.max(0, max - min)) + min;
+                if (delay > 500) {
+                    log(`Пауза ${(delay/1000).toFixed(1)}с...`);
+                    await sleep(delay);
+                }
+                if (window.kudosBotShouldStop) break;
+                
+                log(`API v3: ставлю лайк на активность ${actId}`);
+                const result = await giveKudosViaAPI(actId);
+                if (result.success) {
+                    window.likedActivities.add(actId);
+                    log(`✅ API Лайк: ${athlete} (HTTP ${result.status})`);
+                    updateStats(athlete);
+                    clicked++;
+                    await sleep(Math.max(100, Math.floor(min / 3)));
+                } else if (result.error === 'auth') {
+                    log(`❌ API v3: не авторизован (войди в Strava)`);
+                    // Переключаемся обратно на клики
+                    window.useApiV3 = false;
+                    log(`⚠️ Переключаюсь на обычные клики`);
+                    if (safeClick(btn)) {
+                        if (actId) window.likedActivities.add(actId);
+                        log(`✅ Лайк: ${athlete}`);
+                        updateStats(athlete);
+                        clicked++;
+                    }
+                } else if (result.error === 'ratelimit') {
+                    log(`❌ API v3: rate limit, подожди`);
+                } else {
+                    log(`❌ API v3: ошибка ${result.status || result.error}`);
+                }
+                continue;
+            }
             
             const min = window.kudosMinDelay || 3000;
             const max = window.kudosMaxDelay || 8000;
@@ -562,7 +640,7 @@
         return false;
     }
     
-    function goToNextClub() {
+    async function goToNextClub() {
         // Не инкрементируем здесь — это делается в основном цикле
         log('Возвращаюсь к списку клубов...');
         // Очищаем имя клуба в Android (уходим со страницы клуба)
@@ -572,6 +650,8 @@
             }
         } catch(e) {}
         window.location.href = 'https://www.strava.com/clubs/search';
+        // В фоне навигация не мгновенная — ждем чтобы цикл не продолжился на старой странице
+        await sleep(3000);
     }
     
     async function scrollAndLikeClubFeed(clubUrl) {
@@ -590,7 +670,7 @@
         window.scrollTo({ top: 0, behavior: 'auto' });
         await sleep(1000);
         
-        while (scrollAttempts < maxScrolls && !window.kudosBotShouldStop) {
+        while (scrollAttempts < 3 && !window.kudosBotShouldStop) {
             // Находим все карточки активностей
             const cards = document.querySelectorAll('[data-testid="web-feed-entry"], [data-testid="feed-entry"]');
             log('Найдено карточек: ' + cards.length);
@@ -598,7 +678,7 @@
         let newCardsCount = 0;
         let skippedCardsCount = 0;
         let consecutiveAlreadyLiked = 0; // Счетчик подряд уже-лайкнутых
-        const MAX_CONSECUTIVE_LIKED = 10; // После 10 подряд — уходим из клуба
+        const MAX_CONSECUTIVE_LIKED = window.consecutiveLikedLimit || 10; // Лимит подряд уже-лайкнутых (настраивается в настройках)
         
         for (const card of cards) {
                 if (window.kudosBotShouldStop) break;
@@ -607,10 +687,16 @@
                 const cardId = getActivityIdFromCard(card);
                 if (cardId && processedCardIds.has(cardId)) {
                     skippedCardsCount++;
+                    consecutiveAlreadyLiked++;
+                    if (consecutiveAlreadyLiked >= MAX_CONSECUTIVE_LIKED) {
+                        log('  🔁 ' + consecutiveAlreadyLiked + ' подряд тренировок уже лайкнуты (в global likedActivities). Ухожу в следующий клуб.');
+                        return -1; // Сигнал: пора уходить в следующий клуб
+                    }
                     continue;
                 }
                 if (cardId) processedCardIds.add(cardId);
                 newCardsCount++;
+                consecutiveAlreadyLiked = 0; // Новая карточка — сбрасываем счётчик
                 
                 // Проверяем — это своя тренировка?
                 if (isOwnActivity(card)) {
@@ -698,8 +784,16 @@
                 log('Лайкаю: ' + athlete + ' [кнопка:' + btnInfo + ' размер:' + Math.round(btnRect.width) + 'x' + Math.round(btnRect.height) + ']');
                 
                 // Пауза перед кликом
-                const min = window.kudosMinDelay || 3000;
-                const max = window.kudosMaxDelay || 8000;
+                // В режиме клубов используем clubs_speed, иначе общие настройки
+                let min, max;
+                if (window.location.pathname.includes('/clubs/') && window.clubsSpeed) {
+                    const clubDelay = getClubsDelay();
+                    min = clubDelay.min;
+                    max = clubDelay.max;
+                } else {
+                    min = window.kudosMinDelay || 3000;
+                    max = window.kudosMaxDelay || 8000;
+                }
                 const delay = Math.floor(Math.random() * Math.max(0, max - min)) + min;
                 if (delay > 500) {
                     log('Пауза ' + (delay/1000).toFixed(1) + 'с...');
@@ -708,58 +802,84 @@
                 
                 if (window.kudosBotShouldStop) break;
                 
-                // Кликаем (с retry)
-                let clicked = false;
-                for (let attempt = 0; attempt < 3 && !clicked; attempt++) {
-                    try {
-                        simulateClick(kudosBtn);
-                        clicked = true;
-                    } catch(e) {
-                        try { kudosBtn.click(); clicked = true; } catch(e2) {}
+                let likeSuccess = false;
+                const actId = getActivityIdFromCard(card);
+                
+                // API v3 режим — ставим лайк через REST API вместо кликов
+                if (window.useApiV3 && actId) {
+                    log('API v3: ставлю лайк на активность ' + actId);
+                    const result = await giveKudosViaAPI(actId);
+                    if (result.success) {
+                        likeSuccess = true;
+                        window.likedActivities.add(actId);
+                        log('✅ API Лайк: ' + athlete + ' (HTTP ' + result.status + ')');
+                        updateStats(athlete);
+                        totalLiked++;
+                        consecutiveAlreadyLiked = 0;
+                        await sleep(2000);
+                    } else if (result.error === 'auth') {
+                        log('❌ API v3: не авторизован (войди в Strava в приложении)');
+                    } else if (result.error === 'ratelimit') {
+                        log('❌ API v3: rate limit, подожди');
+                    } else {
+                        log('❌ API v3: ошибка ' + (result.status || result.error));
                     }
-                    if (!clicked) {
-                        await sleep(500);
-                        // Пере-ищем кнопку (DOM мог измениться)
-                        const freshBtns = card.querySelectorAll('button');
-                        for (const fb of freshBtns) {
-                            if ((fb.getAttribute('data-testid') || '').includes('kudos')) {
-                                kudosBtn = fb;
-                                break;
+                } else {
+                    // Обычный режим — кликаем
+                    let clicked = false;
+                    for (let attempt = 0; attempt < 3 && !clicked; attempt++) {
+                        try {
+                            simulateClick(kudosBtn);
+                            clicked = true;
+                        } catch(e) {
+                            try { kudosBtn.click(); clicked = true; } catch(e2) {}
+                        }
+                        if (!clicked) {
+                            await sleep(500);
+                            const freshBtns = card.querySelectorAll('button');
+                            for (const fb of freshBtns) {
+                                if ((fb.getAttribute('data-testid') || '').includes('kudos')) {
+                                    kudosBtn = fb;
+                                    break;
+                                }
                             }
                         }
                     }
-                }
-                
-                if (clicked) {
-                    const actId = getActivityIdFromCard(card);
-                    if (actId) window.likedActivities.add(actId);
-                    log('✅ Лайк: ' + athlete);
-                    updateStats(athlete);
-                    totalLiked++;
-                    await sleep(2000);
-                } else {
-                    log('❌ Не удалось кликнуть');
+                    
+                    if (clicked) {
+                        if (actId) window.likedActivities.add(actId);
+                        log('✅ Лайк: ' + athlete);
+                        updateStats(athlete);
+                        totalLiked++;
+                        consecutiveAlreadyLiked = 0;
+                        await sleep(2000);
+                    } else {
+                        log('❌ Не удалось кликнуть');
+                    }
                 }
             }
             
             log('Новых карточек: ' + newCardsCount + ', пропущено (уже обработано): ' + skippedCardsCount + ', лайкнуто: ' + totalLiked);
             
-            // Если НЕТ новых карточек — прокручиваем вниз для загрузки новых
+            // Если НЕТ новых карточек — клуб полностью обработан или лента закончилась
             if (newCardsCount === 0) {
-                log('Все видимые карточки обработаны, прокручиваю вниз...');
-                window.scrollBy({ top: 800, behavior: 'auto' });
-                await sleep(2000);
-                scrollAttempts++;
-                
-                if (window.scrollY === lastY) {
-                    log('Конец ленты');
-                    break;
-                }
-                lastY = window.scrollY;
+                log('Все видимые карточки уже обработаны, ухожу в следующий клуб');
+                return -2; // Сигнал: все карточки уже обработаны
             }
+            
+            // Прокручиваем вниз для загрузки новых
+            window.scrollBy({ top: 800, behavior: 'auto' });
+            await sleep(2000);
+            scrollAttempts++;
+            
+            if (window.scrollY === lastY) {
+                log('Конец ленты');
+                break;
+            }
+            lastY = window.scrollY;
         }
         
-        log('Всего лайкнуто в клубе: ' + totalLiked);
+        log('Всего лайкнуто в клубе: ' + totalLiked + ', скроллов: ' + scrollAttempts);
         return totalLiked;
     }
     
@@ -783,6 +903,139 @@
         } catch(e) { return null; }
     }
     
+    // МОБИЛЬНЫЙ API: эмулируем приложение Strava с JWT + Api-Key
+    const STRAVA_API_KEY = '0aeb41212aef4bddb762dd34c45e941f';
+    const STRAVA_JWT_SECRET = '988828734992e740390855f07e4ff76648a15e4b42cb1d648bd604c82303da9f0f59afdf07053b7a9c89bfacd67f1402450aa2c3f3a1e2a1765bd51a645cbc26';
+    
+    // Получаем athleteId из cookies, HTML или JavaScript
+    function getAthleteId() {
+        try {
+            // 1. Пробуем из cookies strava_remember_token
+            const match = document.cookie.match(/strava_remember_token=([^;]+)/);
+            if (match) {
+                const parts = match[1].split('_');
+                if (parts.length >= 2) return parts[1];
+            }
+            
+            // 2. Пробуем из cookies strava_remember_id
+            const rememberId = document.cookie.match(/strava_remember_id=([^;]+)/);
+            if (rememberId) return rememberId[1];
+            
+            // 3. Пробуем из meta тегов
+            const meta = document.querySelector('meta[name="athlete-id"]');
+            if (meta) return meta.getAttribute('content');
+            
+            // 4. Пробуем из window object
+            if (window.__ATHLETE_ID__) return window.__ATHLETE_ID__;
+            
+            // 5. Пробуем из window.STRAVA
+            if (window.STRAVA && window.STRAVA.ATHLETE_ID) return window.STRAVA.ATHLETE_ID;
+            
+            // 6. Пробуем из localStorage
+            try {
+                const ls = localStorage.getItem('strava_auth');
+                if (ls) {
+                    const auth = JSON.parse(ls);
+                    if (auth.athlete_id) return auth.athlete_id;
+                }
+            } catch(e) {}
+            
+            // 7. Пробуем найти в HTML
+            const html = document.documentElement.innerHTML;
+            const idMatch = html.match(/"athlete_id":(\d+)/) || html.match(/"current_user_id":(\d+)/);
+            if (idMatch) return idMatch[1];
+            
+            // 8. Пробуем из ссылок на профиль
+            const profileLink = document.querySelector('a[href^="/athletes/"]');
+            if (profileLink) {
+                const href = profileLink.getAttribute('href');
+                const idMatch2 = href.match(/\/athletes\/(\d+)/);
+                if (idMatch2) return idMatch2[1];
+            }
+            
+        } catch(e) {
+            log('Ошибка получения athleteId: ' + e.message);
+        }
+        return null;
+    }
+    
+    // Генерация JWT с Web Crypto API
+    async function generateJWT(athleteId) {
+        if (!window.crypto || !window.crypto.subtle) {
+            throw new Error('Web Crypto API не доступен');
+        }
+        
+        const now = Math.floor(Date.now() / 1000);
+        const exp = now + 300; // 5 минут
+        
+        const header = { alg: 'HS256', typ: 'JWT' };
+        const payload = { userId: athleteId.toString(), iat: now, exp: exp };
+        
+        const encode = (obj) => btoa(JSON.stringify(obj)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+        
+        const headerB64 = encode(header);
+        const payloadB64 = encode(payload);
+        const message = headerB64 + '.' + payloadB64;
+        
+        // HMAC-SHA256 с использованием Web Crypto API
+        const encoder = new TextEncoder();
+        const keyData = encoder.encode(STRAVA_JWT_SECRET);
+        const messageData = encoder.encode(message);
+        
+        const cryptoKey = await crypto.subtle.importKey(
+            'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+        );
+        
+        const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+        const signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
+            .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+        
+        return message + '.' + signatureB64;
+    }
+    
+    // Мобильный API: ставим лайк как приложение Strava
+    async function giveKudosViaAPI(activityId) {
+        const athleteId = getAthleteId();
+        if (!athleteId) {
+            log('❌ Мобильный API: не удалось получить athleteId из cookies/HTML');
+            return { success: false, error: 'no_athlete_id' };
+        }
+        
+        log('API: athleteId=' + athleteId + ', генерирую JWT...');
+        
+        try {
+            const jwt = await generateJWT(athleteId);
+            log('API: JWT сгенерирован');
+            
+            const response = await fetch(`https://www.strava.com/api/v3/activities/${activityId}/kudos`, {
+                method: 'PUT',
+                headers: {
+                    'Api-Key': STRAVA_API_KEY,
+                    'Authorization': 'Bearer ' + jwt,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'User-Agent': 'Strava/463.13 (Android; 10; samsung; SM-G973F)'
+                }
+            });
+            
+            const text = await response.text();
+            log('API: HTTP ' + response.status + ' ' + text.substring(0, 200));
+            
+            if (response.status === 200 || response.status === 204) {
+                return { success: true, status: response.status };
+            } else if (response.status === 401) {
+                return { success: false, error: 'auth', status: response.status };
+            } else if (response.status === 429) {
+                return { success: false, error: 'ratelimit', status: response.status };
+            } else {
+                return { success: false, error: 'http_' + response.status, status: response.status };
+            }
+        } catch(e) {
+            log('API: ошибка ' + e.message);
+            return { success: false, error: 'exception' };
+        }
+    }
+
     function getCurrentUserName() {
         // Получаем имя текущего пользователя со страницы
         try {
@@ -1641,16 +1894,25 @@
             // Главный цикл лайкания в клубе
             let totalClubLikes = 0;
             let emptyCycles = 0;
-            const maxEmptyCycles = 3; // После 3 циклов без лайков — переходим к следующему клубу
+            let clubCycles = 0;
+            const maxEmptyCycles = 1; // Быстро уходим если нет новых лайков
+            const maxClubCycles = 3; // Лимит циклов на одном клубе
             
             while (!window.kudosBotShouldStop) {
+                clubCycles++;
+                if (clubCycles > maxClubCycles) {
+                    log('Достигнут лимит ' + maxClubCycles + ' циклов на клубе, перехожу к следующему');
+                    await goToNextClub();
+                    return;
+                }
+                
                 // Проверяем, есть ли тренировки в ленте
                 const activities = document.querySelectorAll('[data-testid="web-feed-entry"], [data-testid="feed-entry"]');
                 log('Найдено тренировок: ' + activities.length);
                 
                 if (activities.length === 0) {
                     log('Нет тренировок в клубе, возвращаюсь к списку');
-                    goToNextClub();
+                    await goToNextClub();
                     return;
                 }
                 
@@ -1660,7 +1922,7 @@
                 // Сигнал: 10+ подряд уже лайкнуты — уходим в следующий клуб
                 if (liked < 0) {
                     log('Все тренировки в клубе уже лайкнуты, перехожу к следующему');
-                    goToNextClub();
+                    await goToNextClub();
                     return;
                 }
                 
@@ -1672,7 +1934,7 @@
                     log('Пустой цикл (' + emptyCycles + '/' + maxEmptyCycles + ')');
                     if (emptyCycles >= maxEmptyCycles) {
                         log('Лента в клубе закончилась, перехожу к следующему клубу');
-                        goToNextClub();
+                        await goToNextClub();
                         return;
                     }
                 } else {

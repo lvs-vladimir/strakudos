@@ -93,11 +93,13 @@ class KudosService : Service() {
                 val count = getKudosCount()
                 Log.d("KudosService", "Periodic update: count=$count")
                 updateNotification(count)
-                handler.postDelayed(this, 3000) // Обновляем каждые 3 секунды
+                // Пингуем WebView чтобы Chrome не троттлил таймеры в фоне
+                sendBroadcast(Intent("com.strava.kudos.PING_WEBVIEW"))
+                handler.postDelayed(this, 1500) // Пинг каждые 1.5 секунды
             }
         }
         handler.post(updateRunnable!!)
-        Log.d("KudosService", "Periodic update started")
+        Log.d("KudosService", "Periodic update started with WebView ping")
     }
 
     private fun stopPeriodicUpdate() {

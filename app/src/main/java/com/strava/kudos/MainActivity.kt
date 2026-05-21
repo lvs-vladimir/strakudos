@@ -32,6 +32,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvStats: TextView
     private val backgroundHandler = Handler(Looper.getMainLooper())
     private var backgroundRunnable: Runnable? = null
+    
+    // Handler для периодического пробуждения бота в фоне (обход Chrome throttle)
+    private val botWakeHandler = Handler(Looper.getMainLooper())
+    private var botWakeRunnable: Runnable? = null
     private lateinit var tvStrategy: TextView
     private lateinit var btnToggle: Button
     private lateinit var touchOverlay: android.view.View
@@ -42,7 +46,9 @@ class MainActivity : AppCompatActivity() {
     private var kudosCount = 0
     private var isBotRunning = false
     private var lastBotRestartTime = 0L
+    private var pendingBotRestart = false
     private var currentClubName: String = ""
+    private var lastRestartedPath: String = ""
 
     private val serviceStopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -55,10 +61,37 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Пинг от Service чтобы WebView не засыпал в фоне
+    private val webViewPingReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.strava.kudos.PING_WEBVIEW") {
+                // Будим WebView таймеры чтобы Chrome не троттлил setTimeout
+                if (::webView.isInitialized) {
+                    webView.resumeTimers()
+                    // Но-оп JavaScript чтобы поддерживать JS execution context
+                    webView.evaluateJavascript("if(window.__ping)window.__ping++;", null)
+                }
+            }
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
+    private fun saveSystemLog(message: String) {
+        val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
+        val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+        val logEntry = "[$timestamp] [СИСТЕМА] $message\n"
+        val currentLogs = sharedPref.getString("logs", "") ?: ""
+        val newLogs = (logEntry + currentLogs).take(10000)
+        with(sharedPref.edit()) {
+            putString("logs", newLogs)
+            apply()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate called, savedInstanceState=${savedInstanceState != null}")
+        saveSystemLog("onCreate: приложение запущено")
         setContentView(R.layout.activity_main)
 
         // Запрашиваем разрешение на уведомления для Android 13+
@@ -119,7 +152,7 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-                Log.d(TAG, "onPageFinished: url=$url, isBotRunning=$isBotRunning")
+                Log.d(TAG, "onPageFinished: url=$url, isBotRunning=$isBotRunning, pendingBotRestart=$pendingBotRestart")
                 
                 // Сохраняем текущий URL для восстановления после пересоздания Activity
                 if (url != null) {
@@ -129,20 +162,29 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 
+                // Если бот ждёт перезапуска после загрузки страницы — внедряем сейчас
+                if (pendingBotRestart && isBotRunning) {
+                    Log.d(TAG, "onPageFinished: injecting deferred bot.js")
+                    pendingBotRestart = false
+                    doInjectBot()
+                }
+                
+                // Рестарт бота если URL path существенно изменился (навигация бота на новую страницу)
+                val currentPath = url?.substringBefore("?")?.substringBefore("#") ?: ""
+                val lastPath = lastRestartedPath.substringBefore("?").substringBefore("#")
+                if (isBotRunning && currentPath != lastPath && url != null && 
+                    (url.contains("strava.com/dashboard") || url.contains("strava.com/clubs/"))) {
+                    Log.d(TAG, "onPageFinished: URL path changed from '$lastPath' to '$currentPath', restarting bot")
+                saveSystemLog("onPageFinished: смена страницы на $currentPath, рестарт бота")
+                    lastRestartedPath = url
+                    restartBot()
+                }
+                
                 if (url != null && (url.contains("strava.com/dashboard") || url.contains("strava.com/clubs/"))) {
                     tvStatus.text = if (isBotRunning) "РАБОТАЕТ" else "ВХОД ВЫПОЛНЕН (ГОТОВ)"
                     tvStatus.setTextColor(android.graphics.Color.parseColor("#00F0FF"))
                     btnToggle.isEnabled = true
                     btnToggle.alpha = 1.0f
-                    if (isBotRunning) {
-                        Log.d(TAG, "Feed page loaded: url=$url, bot was running, will restart...")
-                        // Даем React-приложению время отрендерить контент перед запуском бота
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                            if (isBotRunning) {
-                                restartBot()
-                            }
-                        }, 2000)
-                    }
                 } else {
                     tvStatus.text = "ОЖИДАНИЕ ВХОДА"
                     tvStatus.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
@@ -161,11 +203,16 @@ class MainActivity : AppCompatActivity() {
         // В этом случае НЕ загружаем URL заново.
         // Если это первый запуск — загружаем сохраненный URL или страницу входа.
         if (savedInstanceState == null) {
-            val savedUrl = sharedPref.getString("last_url", null)
-            if (savedUrl != null && savedUrl.contains("strava.com")) {
-                webView.loadUrl(savedUrl)
+            // Проверяем, запущен ли тест API режим
+            if (intent.getBooleanExtra("test_api", false)) {
+                webView.loadUrl("file:///android_asset/test_api.html")
             } else {
-                webView.loadUrl("https://www.strava.com/login")
+                val savedUrl = sharedPref.getString("last_url", null)
+                if (savedUrl != null && savedUrl.contains("strava.com")) {
+                    webView.loadUrl(savedUrl)
+                } else {
+                    webView.loadUrl("https://www.strava.com/login")
+                }
             }
         }
         // Если savedInstanceState != null, WebView восстановит состояние сама
@@ -208,23 +255,28 @@ class MainActivity : AppCompatActivity() {
         val strategy = sharedPref.getString("strategy", "smart") ?: "smart"
         updateStrategyText(strategy)
 
-        // Если бот был запущен и страница загружена — перезапускаем бота (с debounce)
+        // Если бот был запущен и Activity была уничтожена/пересоздана — рестартуем
+        // НО только если URL существенно изменился (бот перешёл на новую страницу в фоне)
         if (isBotRunning) {
             val currentUrl = webView.url
-            Log.d(TAG, "onResume: bot was running, checking url=$currentUrl")
-            if (currentUrl != null && (currentUrl.contains("strava.com/dashboard") || currentUrl.contains("strava.com/clubs/"))) {
-                val now = System.currentTimeMillis()
-                if (now - lastBotRestartTime > 5000) {
-                    Log.d(TAG, "onResume: restarting bot on current page")
-                    restartBot()
-                } else {
-                    Log.d(TAG, "onResume: skipping restart (debounce)")
-                }
+            val currentPath = currentUrl?.substringBefore("?")?.substringBefore("#") ?: ""
+            val lastPath = lastRestartedPath.substringBefore("?").substringBefore("#")
+            Log.d(TAG, "onResume: bot was running, currentPath=$currentPath, lastRestartedPath=$lastPath")
+            if (currentPath != lastPath && currentUrl != null && 
+                (currentUrl.contains("strava.com/dashboard") || currentUrl.contains("strava.com/clubs/"))) {
+                Log.d(TAG, "onResume: URL path changed, restarting bot")
+                restartBot()
+            } else {
+                Log.d(TAG, "onResume: same page, NOT restarting bot (bot state preserved)")
             }
         }
 
         // Регистрируем receiver для остановки из уведомления
         registerReceiver(serviceStopReceiver, IntentFilter("com.strava.kudos.SERVICE_STOPPED"),
+            Context.RECEIVER_NOT_EXPORTED)
+        
+        // Регистрируем receiver для пинга WebView из сервиса
+        registerReceiver(webViewPingReceiver, IntentFilter("com.strava.kudos.PING_WEBVIEW"),
             Context.RECEIVER_NOT_EXPORTED)
     }
 
@@ -259,6 +311,11 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, "onDestroy called")
         try {
             unregisterReceiver(serviceStopReceiver)
+        } catch (e: IllegalArgumentException) {
+            // Receiver may not be registered
+        }
+        try {
+            unregisterReceiver(webViewPingReceiver)
         } catch (e: IllegalArgumentException) {
             // Receiver may not be registered
         }
@@ -306,9 +363,10 @@ class MainActivity : AppCompatActivity() {
         lastBotRestartTime = now
         Log.d(TAG, "startBot called")
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
+        val strategy = sharedPref.getString("strategy", "smart") ?: "smart"
+        saveSystemLog("startBot: запуск бота, стратегия=$strategy")
         val minMs = sharedPref.getInt("min_delay", 5000)
         val maxMs = sharedPref.getInt("max_delay", 12000)
-        val strategy = sharedPref.getString("strategy", "smart") ?: "smart"
         
         // Очищаем кэш WebView чтобы загрузить свежий bot.js
         webView.clearCache(true)
@@ -318,10 +376,13 @@ class MainActivity : AppCompatActivity() {
         var botScript = readAssetFile("bot.js")
         if (botScript.isNotEmpty()) {
             val clubsSpeed = sharedPref.getString("clubs_speed", "medium") ?: "medium"
+            val consecutiveLimit = sharedPref.getInt("consecutive_liked_limit", 10)
+            val useApiV3 = sharedPref.getBoolean("use_api_v3", false)
             botScript = botScript.replace("const STRATEGY = window.kudosStrategy || 'smart';", "const STRATEGY = '$strategy';")
-            webView.evaluateJavascript("window.kudosMinDelay = $minMs; window.kudosMaxDelay = $maxMs; window.clubsSpeed = '$clubsSpeed';", null)
+            webView.evaluateJavascript("window.kudosMinDelay = $minMs; window.kudosMaxDelay = $maxMs; window.clubsSpeed = '$clubsSpeed'; window.consecutiveLikedLimit = $consecutiveLimit; window.useApiV3 = ${useApiV3};", null)
             webView.evaluateJavascript(botScript, null)
             isBotRunning = true
+            lastRestartedPath = webView.url ?: ""
             with(sharedPref.edit()) {
                 putBoolean("is_bot_running", true)
                 apply()
@@ -343,11 +404,15 @@ class MainActivity : AppCompatActivity() {
             } else {
                 startService(Intent(this, KudosService::class.java))
             }
+            
+            // Запускаем wake loop чтобы бот работал в фоне (Chrome троттлит setTimeout)
+            startBotWakeLoop()
         }
     }
 
     private fun stopBot() {
         Log.d(TAG, "stopBot called")
+        saveSystemLog("stopBot: остановка бота")
         webView.evaluateJavascript("window.kudosBotShouldStop = true;", null)
         isBotRunning = false
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
@@ -368,21 +433,67 @@ class MainActivity : AppCompatActivity() {
         
         // Останавливаем сервис
         stopService(Intent(this, KudosService::class.java))
+        
+        // Останавливаем wake loop
+        stopBotWakeLoop()
+    }
+    
+    private fun startBotWakeLoop() {
+        stopBotWakeLoop() // на всякий случай
+        val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
+        val minMs = sharedPref.getInt("min_delay", 3000)
+        val maxMs = sharedPref.getInt("max_delay", 8000)
+        
+        botWakeRunnable = object : Runnable {
+            override fun run() {
+                if (isBotRunning && ::webView.isInitialized) {
+                    // Будим бота в фоне — Chrome замораживает setTimeout,
+                    // поэтому Android сам триггерит следующий шаг через evaluateJavascript
+                    webView.evaluateJavascript("window.__wakeBot && window.__wakeBot();", null)
+                }
+                if (isBotRunning) {
+                    val delay = (minMs..maxMs).random().toLong()
+                    botWakeHandler.postDelayed(this, delay)
+                }
+            }
+        }
+        botWakeHandler.post(botWakeRunnable!!)
+        Log.d(TAG, "Bot wake loop started with delays $minMs-$maxMs ms")
+    }
+    
+    private fun stopBotWakeLoop() {
+        botWakeRunnable?.let { botWakeHandler.removeCallbacks(it) }
+        botWakeRunnable = null
+        Log.d(TAG, "Bot wake loop stopped")
     }
 
     private fun restartBot() {
         val now = System.currentTimeMillis()
-        if (now - lastBotRestartTime < 8000) {
+        if (now - lastBotRestartTime < 2000) {
             Log.d(TAG, "restartBot: debounce, skipping (last restart was ${(now - lastBotRestartTime)/1000}s ago)")
             return
         }
         lastBotRestartTime = now
         Log.d(TAG, "restartBot called")
         
+        // Если WebView ещё грузит страницу — откладываем инъекцию до onPageFinished
+        if (webView.progress < 100) {
+            Log.d(TAG, "restartBot: WebView still loading (progress=${webView.progress}), deferring to onPageFinished")
+            pendingBotRestart = true
+            return
+        }
+        
+        doInjectBot()
+    }
+    
+    private fun doInjectBot() {
         val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
         val minMs = sharedPref.getInt("min_delay", 5000)
         val maxMs = sharedPref.getInt("max_delay", 12000)
         val strategy = sharedPref.getString("strategy", "smart") ?: "smart"
+        
+        // Запоминаем URL на котором внедряем бота — чтобы onPageFinished не рестартовал повторно
+        lastRestartedPath = webView.url ?: ""
         
         // Очищаем кэш WebView чтобы загрузить свежий bot.js
         webView.clearCache(true)
@@ -397,9 +508,11 @@ class MainActivity : AppCompatActivity() {
             if (botScript.isNotEmpty()) {
                 botScript = botScript.replace("const STRATEGY = window.kudosStrategy || 'smart';", "const STRATEGY = '$strategy';")
                 val clubsSpeed = sharedPref.getString("clubs_speed", "medium") ?: "medium"
-                webView.evaluateJavascript("window.kudosMinDelay = $minMs; window.kudosMaxDelay = $maxMs; window.clubsSpeed = '$clubsSpeed';", null)
+                val consecutiveLimit = sharedPref.getInt("consecutive_liked_limit", 10)
+                val useApiV3 = sharedPref.getBoolean("use_api_v3", false)
+                webView.evaluateJavascript("window.kudosMinDelay = $minMs; window.kudosMaxDelay = $maxMs; window.clubsSpeed = '$clubsSpeed'; window.consecutiveLikedLimit = $consecutiveLimit; window.useApiV3 = ${useApiV3};", null)
                 webView.evaluateJavascript(botScript, null)
-                Log.d(TAG, "restartBot: bot.js injected after ${delayMs}ms delay with strategy=$strategy")
+                Log.d(TAG, "doInjectBot: bot.js injected after ${delayMs}ms delay with strategy=$strategy")
             }
         }, delayMs)
         
@@ -417,6 +530,9 @@ class MainActivity : AppCompatActivity() {
         } else {
             startService(Intent(this, KudosService::class.java))
         }
+        
+        // Запускаем wake loop чтобы бот работал в фоне (Chrome троттлит setTimeout)
+        startBotWakeLoop()
     }
 
     private fun readAssetFile(fileName: String): String {
@@ -440,6 +556,15 @@ class MainActivity : AppCompatActivity() {
     inner class BotJavascriptInterface {
         @JavascriptInterface
         fun log(message: String) {
+            val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
+            val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+            val logEntry = "[$timestamp] $message\n"
+            val currentLogs = sharedPref.getString("logs", "") ?: ""
+            val newLogs = (logEntry + currentLogs).take(10000) // Лимит 10KB
+            with(sharedPref.edit()) {
+                putString("logs", newLogs)
+                apply()
+            }
         }
 
         @JavascriptInterface
