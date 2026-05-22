@@ -2,3 +2,5 @@ app/build/
 .gradle/
 *.apk
 local.properties
+.secrets/
+.github/instructions/memory.instruction.md
