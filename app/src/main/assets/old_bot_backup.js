@@ -291,8 +291,8 @@ console.log("[KudosBot] FILE LOADED - v1.8.10");
             const athlete = findAthleteName(btn);
             log(`Лайкаю: ${athlete}`);
 
-            // API v3 режим — ставим лайк через REST API вместо кликов
-            if (window.useApiV3 && actId) {
+        // Legacy REST mode disabled
+            if (false && actId) {
                 // Сбрасываем счетчик rate limit при каждой попытке
                 window.rateLimitCount = window.rateLimitCount || 0;
 
@@ -305,7 +305,7 @@ console.log("[KudosBot] FILE LOADED - v1.8.10");
                 }
                 if (window.kudosBotShouldStop) break;
 
-                log(`API v3: ставлю лайк на активность ${actId}`);
+                log(`REST mode disabled: ставлю лайк на активность ${actId}`);
                 const result = await giveKudosViaAPI(actId);
                 if (result.success) {
                     window.likedActivities.add(actId);
@@ -315,9 +315,9 @@ console.log("[KudosBot] FILE LOADED - v1.8.10");
                     clicked++;
                     await sleep(Math.max(100, Math.floor(min / 3)));
                 } else if (result.error === 'auth') {
-                    log(`❌ API v3: не авторизован (войди в Strava)`);
+                    log(`REST mode disabled: auth error`);
                     // Переключаемся обратно на клики
-                    window.useApiV3 = false;
+                    /* web api mode disabled */
                     log(`⚠️ Переключаюсь на обычные клики`);
                     if (safeClick(btn)) {
                         if (actId) window.likedActivities.add(actId);
@@ -328,7 +328,7 @@ console.log("[KudosBot] FILE LOADED - v1.8.10");
                 } else {
                     // Любая ошибка API — fallback на DOM клик
                     log(`❌ API: ошибка ${result.error} (HTTP ${result.status || '?'}), пробую DOM клик`);
-                    window.useApiV3 = false;
+                    /* web api mode disabled */
                     log(`⚠️ Переключаюсь на обычные клики`);
                     if (safeClick(btn)) {
                         if (actId) window.likedActivities.add(actId);
@@ -858,9 +858,9 @@ console.log("[KudosBot] FILE LOADED - v1.8.10");
                 let likeSuccess = false;
                 const actId = getActivityIdFromCard(card);
 
-                // API v3 режим — ставим лайк через REST API вместо кликов
-                if (window.useApiV3 && actId) {
-                    log('API v3: ставлю лайк на активность ' + actId);
+        // Legacy REST mode disabled
+                if (false && actId) {
+                    log('REST mode disabled: ставлю лайк на активность ' + actId);
                     const result = await giveKudosViaAPI(actId);
                     if (result.success) {
                         likeSuccess = true;
@@ -872,8 +872,8 @@ console.log("[KudosBot] FILE LOADED - v1.8.10");
                         await sleep(2000);
                     } else {
                         // Любая ошибка API — fallback на DOM клик
-                        log('❌ API v3: ошибка ' + (result.error || result.status) + ', пробую DOM клик');
-                        window.useApiV3 = false;
+                        log('REST mode disabled: error ' + (result.error || result.status) + ', пробую DOM клик');
+                        /* web api mode disabled */
                         log('⚠️ Переключаюсь на обычные клики');
                         // Не ставим likeSuccess — пусть DOM клик ниже сработает
                     }

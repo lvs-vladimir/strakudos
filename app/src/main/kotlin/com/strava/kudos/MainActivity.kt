@@ -13,7 +13,6 @@ import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.drawerlayout.widget.DrawerLayout
@@ -27,6 +26,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvStatus: TextView
     private lateinit var tvStats: TextView
     private lateinit var tvStrategy: TextView
+    private lateinit var tvSmartTimer: TextView
     private lateinit var btnToggle: Button
     private lateinit var touchOverlay: android.view.View
     private lateinit var drawerLayout: DrawerLayout
@@ -101,6 +101,7 @@ class MainActivity : AppCompatActivity() {
         tvStatus = findViewById(R.id.tvStatus)
         tvStats = findViewById(R.id.tvStats)
         tvStrategy = findViewById(R.id.tvStrategy)
+        tvSmartTimer = findViewById(R.id.tvSmartTimer)
         btnToggle = findViewById(R.id.btnToggle)
         touchOverlay = findViewById(R.id.touchOverlay)
         drawerLayout = findViewById(R.id.drawerLayout)
@@ -119,7 +120,8 @@ class MainActivity : AppCompatActivity() {
             likedActivityRepository = likedActivityRepository,
             clubRotationRepository = clubRotationRepository,
             onKudosGiven = { athleteName -> onKudosGivenFromKotlin(athleteName) },
-            onClubNameChanged = { clubName -> onClubNameChangedFromKotlin(clubName) }
+            onClubNameChanged = { clubName -> onClubNameChangedFromKotlin(clubName) },
+            onSmartTimerTick = { secondsLeft -> onSmartTimerTick(secondsLeft) }
         )
 
         val savedStrategy = settingsRepository.getStrategyValue()
@@ -138,6 +140,7 @@ class MainActivity : AppCompatActivity() {
 
                 // Сохраняем текущий URL для восстановления после пересоздания Activity
                 webViewController.saveLastUrl(url)
+                webViewController.consumeForceTopAfterReload()
 
                 // Если бот был запущен до перезапуска Activity/Android, стартуем после загрузки Strava.
                 if (pendingStartAfterPageLoad && (url?.contains("strava.com/dashboard") == true || url?.contains("strava.com/clubs/") == true)) {
@@ -170,7 +173,6 @@ class MainActivity : AppCompatActivity() {
 
         webView.addJavascriptInterface(createBotJsBridge(), "AndroidApp")
         webView.addJavascriptInterface(createLegacyBotJsBridge(), "LegacyAndroidApp")
-        webView.addJavascriptInterface(createApiTestJsBridge(), "ApiTestAndroidApp")
 
         val shouldResumeBot = settingsRepository.isBotRunning()
         pendingStartAfterPageLoad = shouldResumeBot
@@ -226,16 +228,6 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, "onNewIntent called")
         if (intent != null) {
             setIntent(intent)
-            // Если пришел intent с тестом API — запускаем сразу
-            if (intent.getBooleanExtra("run_api_test", false)) {
-                val activityId = intent.getStringExtra("test_activity_id") ?: ""
-                Log.d(TAG, "onNewIntent: API test requested for activity $activityId")
-                if (webView.url?.contains("strava.com") == true) {
-                    runApiTest(activityId)
-                } else {
-                    Toast.makeText(this, "Сначала залогинься в Strava!", Toast.LENGTH_LONG).show()
-                }
-            }
             // Сброс списка лайкнутых
             if (intent.getBooleanExtra("reset_liked_data", false)) {
                 Log.d(TAG, "onNewIntent: reset liked data requested")
@@ -265,17 +257,6 @@ class MainActivity : AppCompatActivity() {
                 restartBot()
             } else {
                 Log.d(TAG, "onResume: same page, NOT restarting bot (bot state preserved)")
-            }
-        }
-
-        // Проверяем, нужно ли запустить тест API (для случая когда Activity создается заново)
-        if (intent.getBooleanExtra("run_api_test", false)) {
-            val activityId = intent.getStringExtra("test_activity_id") ?: ""
-            Log.d(TAG, "onResume: API test requested for activity $activityId")
-            if (webView.url?.contains("strava.com") == true) {
-                runApiTest(activityId)
-            } else {
-                Toast.makeText(this, "Сначала залогинься в Strava!", Toast.LENGTH_LONG).show()
             }
         }
 
@@ -379,6 +360,28 @@ class MainActivity : AppCompatActivity() {
         updateStrategyText(settingsRepository.getStrategyValue(), clubName)
     }
 
+    private fun onSmartTimerTick(secondsLeft: Int?) {
+        runOnUiThread {
+            if (secondsLeft == null || secondsLeft <= 0 || !botController.isRunning) {
+                tvSmartTimer.text = ""
+                tvSmartTimer.visibility = android.view.View.GONE
+                if (botController.isRunning) {
+                    tvStatus.text = "РАБОТАЕТ"
+                    tvStatus.setTextColor(android.graphics.Color.parseColor("#00F0FF"))
+                }
+                return@runOnUiThread
+            }
+
+            val minutes = secondsLeft / 60
+            val seconds = secondsLeft % 60
+            val formatted = String.format("%02d:%02d", minutes, seconds)
+            tvSmartTimer.text = "Следующий запуск умной стратегии через $formatted"
+            tvSmartTimer.visibility = android.view.View.VISIBLE
+            tvStatus.text = "ПАУЗА"
+            tvStatus.setTextColor(android.graphics.Color.parseColor("#FFD166"))
+        }
+    }
+
     private fun createBotJsBridge(): BotJsBridge {
         return BotJsBridge(logRepository = logRepository)
     }
@@ -411,10 +414,6 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    private fun createApiTestJsBridge(): ApiTestJsBridge {
-        return ApiTestJsBridge(logRepository = logRepository)
-    }
-
     private fun updateStrategyText(strategy: String, clubName: String = currentClubName) {
         val strategyName = when (strategy) {
             "smart" -> "УМНАЯ"
@@ -430,7 +429,10 @@ class MainActivity : AppCompatActivity() {
     private fun updateBotUi(running: Boolean, stoppedLabel: String = "ОСТАНОВЛЕН") {
         if (running) {
             btnToggle.text = "СТОП"
-            btnToggle.setBackgroundResource(R.drawable.btn_secondary_bg)
+            btnToggle.isEnabled = true
+            btnToggle.isClickable = true
+            btnToggle.alpha = 1.0f
+            btnToggle.setBackgroundResource(R.drawable.btn_stop_bg)
             btnToggle.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
             touchOverlay.visibility = android.view.View.VISIBLE
             tvStatus.text = "РАБОТАЕТ"
@@ -444,6 +446,8 @@ class MainActivity : AppCompatActivity() {
             btnToggle.setBackgroundResource(R.drawable.btn_primary_bg)
             btnToggle.setTextColor(android.graphics.Color.parseColor("#000000"))
             touchOverlay.visibility = android.view.View.GONE
+            tvSmartTimer.text = ""
+            tvSmartTimer.visibility = android.view.View.GONE
             tvStatus.text = stoppedLabel
             tvStatus.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
             btnRefresh.isEnabled = true
@@ -530,8 +534,5 @@ class MainActivity : AppCompatActivity() {
         webViewController.reload()
         Toast.makeText(this, "Список лайков клубная история сброшены", Toast.LENGTH_SHORT).show()
         saveSystemLog("Сброс списка лайков клубной истории")
-    }
-    private fun runApiTest(activityId: String) {
-        ApiTestRunner(this, webView, logRepository).run(activityId)
     }
 }

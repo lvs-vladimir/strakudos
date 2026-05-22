@@ -30,7 +30,7 @@ class LogRepository(context: Context) {
     }
 
     companion object {
-        private const val KEY_LOGS = "logs"
+        const val KEY_LOGS = "logs"
         private const val MAX_LOG_SIZE = 10_000
     }
 }

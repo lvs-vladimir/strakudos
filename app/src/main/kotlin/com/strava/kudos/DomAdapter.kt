@@ -20,7 +20,7 @@ class DomAdapter(
 
         webViewController.evaluate("if(window.__StrakudosAndroidApp) window.AndroidApp = window.__StrakudosAndroidApp;", null)
         webViewController.evaluate(adapterScript) {
-            webViewController.evaluate("Boolean(window.StrakudosDom && window.StrakudosDom.version >= 4);") { raw ->
+            webViewController.evaluate("Boolean(window.StrakudosDom && window.StrakudosDom.version >= 5);") { raw ->
                 callback?.invoke(raw == "true")
             }
         }

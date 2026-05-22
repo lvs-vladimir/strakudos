@@ -11,7 +11,6 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
 class SettingsActivity : AppCompatActivity() {
-
     private lateinit var settingsRepository: SettingsRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -24,12 +23,10 @@ class SettingsActivity : AppCompatActivity() {
         val btnResetCounter = findViewById<Button>(R.id.btnResetCounter)
         val radioClubsSpeed = findViewById<RadioGroup>(R.id.radioClubsSpeed)
         val etConsecutiveLimit = findViewById<EditText>(R.id.etConsecutiveLimit)
-        val switchApiV3 = findViewById<Switch>(R.id.switchApiV3)
         val switchAutostart = findViewById<Switch>(R.id.switchAutostart)
 
         val currentSpeed = settingsRepository.getClubsSpeed()
         val currentConsecutiveLimit = settingsRepository.getConsecutiveLikedLimit()
-        val useApiV3 = settingsRepository.isApiV3Enabled()
         val autostartEnabled = settingsRepository.isAutostartEnabled()
 
         when (currentSpeed) {
@@ -40,17 +37,15 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         etConsecutiveLimit.setText(currentConsecutiveLimit.toString())
-        switchApiV3.isChecked = useApiV3
         switchAutostart.isChecked = autostartEnabled
-
-        switchApiV3.setOnCheckedChangeListener { _, isChecked ->
-            settingsRepository.setApiV3Enabled(isChecked)
-            Toast.makeText(this, if (isChecked) "API v3 включен" else "API v3 выключен", Toast.LENGTH_SHORT).show()
-        }
 
         switchAutostart.setOnCheckedChangeListener { _, isChecked ->
             settingsRepository.setAutostartEnabled(isChecked)
-            Toast.makeText(this, if (isChecked) "Автозапуск включен" else "Автозапуск выключен", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                if (isChecked) "Автозапуск включен" else "Автозапуск выключен",
+                Toast.LENGTH_SHORT
+            ).show()
         }
 
         radioClubsSpeed.setOnCheckedChangeListener { _, checkedId ->
@@ -79,22 +74,7 @@ class SettingsActivity : AppCompatActivity() {
             val intent = Intent(this, MainActivity::class.java)
             intent.putExtra("reset_liked_data", true)
             startActivity(intent)
-            Toast.makeText(this, "Счетчик и список лайков сброшены", Toast.LENGTH_SHORT).show()
-        }
-
-        val btnTestApi = findViewById<Button>(R.id.btnTestApi)
-        val etTestActivityId = findViewById<EditText>(R.id.etTestActivityId)
-        btnTestApi.setOnClickListener {
-            val activityId = etTestActivityId.text.toString().trim()
-            if (activityId.isEmpty()) {
-                Toast.makeText(this, "Введи ID активности для теста", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            val intent = Intent(this, MainActivity::class.java)
-            intent.putExtra("run_api_test", true)
-            intent.putExtra("test_activity_id", activityId)
-            startActivity(intent)
+            Toast.makeText(this, "Счетчик список лайков сброшены", Toast.LENGTH_SHORT).show()
         }
     }
 

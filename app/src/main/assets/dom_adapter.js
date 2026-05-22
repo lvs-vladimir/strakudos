@@ -1,7 +1,7 @@
 // Strakudos DOM Adapter
 // Thin JavaScript layer for Kotlin controllers/strategies.
 (function () {
-  if (window.StrakudosDom && window.StrakudosDom.version >= 4) return;
+  if (window.StrakudosDom && window.StrakudosDom.version >= 5) return;
 
   const ACTIVITY_RE = /\/activities\/(\d+)/;
   const ATHLETE_RE = /\/athletes\/(\d+)/;
@@ -172,15 +172,20 @@
     return testId.includes('un-kudos') || pressed || aria.includes('remove kudos') || svgFill === '#fc5200';
   }
 
-  function isInViewportByRect(rect) {
-    return rect.bottom > 80 && rect.top < (window.innerHeight - 40);
-  }
+function isInViewportByRect(rect) {
+  return rect.bottom >= 80 && rect.top <= (window.innerHeight - 40);
+}
 
-  function isInViewport(el) {
-    return isInViewportByRect(el.getBoundingClientRect());
-  }
+function isNearViewportByRect(rect, margin) {
+  const safeMargin = typeof margin === 'number' ? margin : 800;
+  return rect.bottom >= -safeMargin && rect.top <= (window.innerHeight + safeMargin);
+}
 
-  function clickElement(el) {
+function isInViewport(el) {
+  return isInViewportByRect(el.getBoundingClientRect());
+}
+
+function clickElement(el) {
     const rect = el.getBoundingClientRect();
     const x = rect.left + rect.width / 2;
     const y = rect.top + rect.height / 2;
@@ -321,11 +326,23 @@
     return [];
   }
 
-  function getAllFeedCards() {
-    return getCards().flatMap(toFeedCards);
-  }
+function getNearViewportCards(margin) {
+  return getCards().filter(function (card) {
+    return isNearViewportByRect(card.getBoundingClientRect(), margin);
+  });
+}
 
-  function pageInfo() {
+function getAllFeedCards() {
+  return getCards().flatMap(toFeedCards);
+}
+
+function getVisibleFeedCards() {
+  return getNearViewportCards(900).flatMap(toFeedCards).filter(function (card) {
+    return card.bottom >= 80 && card.top <= (window.innerHeight - 40);
+  });
+}
+
+function pageInfo() {
     const scrollHeight = Math.max(document.documentElement.scrollHeight || 0, document.body.scrollHeight || 0);
     return {
       url: window.location.href,
@@ -362,23 +379,20 @@
   }
 
   window.StrakudosDom = {
-    version: 4,
+    version: 5,
 
-    scanVisibleCards: function () {
-      const info = pageInfo();
-      const cards = getAllFeedCards().filter(function (card) {
-        return card.bottom > 80 && card.top < (window.innerHeight - 40);
-      });
-      return Object.assign(info, { cards: cards });
-    },
+  scanVisibleCards: function () {
+    const info = pageInfo();
+    return Object.assign(info, { cards: getVisibleFeedCards() });
+  },
 
     scanAllCards: function () {
       const info = pageInfo();
       return Object.assign(info, { cards: getAllFeedCards() });
     },
 
-    clickKudos: function (activityId) {
-      for (const card of getCards()) {
+  clickKudos: function (activityId) {
+    for (const card of getNearViewportCards(1200)) {
         const buttons = getKudosButtons(card);
         const usedIds = new Set();
         for (let i = 0; i < buttons.length; i++) {

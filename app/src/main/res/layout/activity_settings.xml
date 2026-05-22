@@ -164,51 +164,6 @@
                 android:textSize="12sp"
                 android:layout_marginTop="4dp" />
 
-            <!-- API v3 режим -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="РЕЖИМ API v3"
-                android:textColor="#00F0FF"
-                android:textStyle="bold"
-                android:textSize="14sp"
-                android:letterSpacing="0.1"
-                android:layout_marginTop="24dp"
-                android:layout_marginBottom="12dp" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:background="#111111"
-                android:padding="12dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Использовать API v3 (вместо кликов)"
-                    android:textColor="#FFFFFF"
-                    android:textSize="14sp" />
-
-                <Switch
-                    android:id="@+id/switchApiV3"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:checked="false"
-                    android:thumbTint="#00F0FF"
-                    android:trackTint="#333333" />
-            </LinearLayout>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Бот будет ставить лайки через REST API вместо имитации кликов. Может обходить веб rate-limit."
-            android:textColor="#888888"
-            android:textSize="12sp"
-            android:layout_marginTop="4dp" />
-
         <!-- Автозапуск -->
         <TextView
             android:layout_width="match_parent"
@@ -253,39 +208,6 @@
             android:textColor="#888888"
             android:textSize="12sp"
             android:layout_marginTop="4dp" />
-
-            <EditText
-                android:id="@+id/etTestActivityId"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:background="#111111"
-                android:textColor="#FFFFFF"
-                android:textColorHint="#666666"
-                android:hint="ID активности для теста (например: 18595955723)"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:textSize="14sp"
-                android:layout_marginTop="16dp"
-                android:inputType="number" />
-
-            <Button
-                android:id="@+id/btnTestApi"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:background="@drawable/btn_primary_bg"
-                android:text="Тестировать API"
-                android:textColor="#000000"
-                android:textStyle="bold"
-                android:textSize="14sp"
-                android:layout_marginTop="8dp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Запустит тест прямо на текущей странице Strava (должен быть залогинен)."
-                android:textColor="#888888"
-                android:textSize="12sp"
-                android:layout_marginTop="4dp" />
 
             <Button
                 android:id="@+id/btnResetCounter"

@@ -13,7 +13,8 @@ class SettingsRepository(context: Context) {
             maxDelayMs = getMaxDelayMs(),
             clubsSpeed = ClubsSpeed.fromPref(getClubsSpeedValue()),
             consecutiveLikedLimit = getConsecutiveLikedLimit(),
-            useApiV3 = isApiV3Enabled(),
+            smartCycleTimerEnabled = isSmartCycleTimerEnabled(),
+            smartCycleTimerMinutes = getSmartCycleTimerMinutes(),
             kotlinStrategiesEnabled = areKotlinStrategiesEnabled(),
             autostartEnabled = isAutostartEnabled(),
             isBotRunning = isBotRunning(),
@@ -39,8 +40,11 @@ class SettingsRepository(context: Context) {
     fun getConsecutiveLikedLimit(): Int = prefs.getInt(KEY_CONSECUTIVE_LIMIT, 10)
     fun setConsecutiveLikedLimit(value: Int) = prefs.edit().putInt(KEY_CONSECUTIVE_LIMIT, value.coerceIn(1, 100)).apply()
 
-    fun isApiV3Enabled(): Boolean = prefs.getBoolean(KEY_USE_API_V3, false)
-    fun setApiV3Enabled(value: Boolean) = prefs.edit().putBoolean(KEY_USE_API_V3, value).apply()
+    fun isSmartCycleTimerEnabled(): Boolean = prefs.getBoolean(KEY_SMART_CYCLE_TIMER_ENABLED, false)
+    fun setSmartCycleTimerEnabled(value: Boolean) = prefs.edit().putBoolean(KEY_SMART_CYCLE_TIMER_ENABLED, value).apply()
+
+    fun getSmartCycleTimerMinutes(): Int = prefs.getInt(KEY_SMART_CYCLE_TIMER_MINUTES, 10)
+    fun setSmartCycleTimerMinutes(value: Int) = prefs.edit().putInt(KEY_SMART_CYCLE_TIMER_MINUTES, value.coerceIn(1, 1440)).apply()
 
     fun isAutostartEnabled(): Boolean = prefs.getBoolean(KEY_AUTOSTART, false)
     fun setAutostartEnabled(value: Boolean) = prefs.edit().putBoolean(KEY_AUTOSTART, value).apply()
@@ -65,7 +69,8 @@ class SettingsRepository(context: Context) {
         const val KEY_MAX_DELAY = "max_delay"
         const val KEY_CLUBS_SPEED = "clubs_speed"
         const val KEY_CONSECUTIVE_LIMIT = "consecutive_liked_limit"
-        const val KEY_USE_API_V3 = "use_api_v3"
+        const val KEY_SMART_CYCLE_TIMER_ENABLED = "smart_cycle_timer_enabled"
+        const val KEY_SMART_CYCLE_TIMER_MINUTES = "smart_cycle_timer_minutes"
         const val KEY_AUTOSTART = "autostart_enabled"
         const val KEY_KOTLIN_STRATEGIES = "kotlin_strategies_enabled"
         const val KEY_IS_BOT_RUNNING = "is_bot_running"

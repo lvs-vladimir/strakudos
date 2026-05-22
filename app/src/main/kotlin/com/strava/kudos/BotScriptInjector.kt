@@ -30,7 +30,6 @@ class BotScriptInjector(
 
         val clubsSpeed = settings.clubsSpeed.prefValue
         val consecutiveLimit = settings.consecutiveLikedLimit
-        val useApiV3 = settings.useApiV3
         val minMs = settings.minDelayMs
         val maxMs = settings.maxDelayMs
 
@@ -41,12 +40,11 @@ class BotScriptInjector(
             window.kudosMaxDelay = $maxMs;
             window.clubsSpeed = '$clubsSpeed';
             window.consecutiveLikedLimit = $consecutiveLimit;
-            window.useApiV3 = $useApiV3;
             if (!window.__StrakudosAndroidApp && window.AndroidApp) window.__StrakudosAndroidApp = window.AndroidApp;
             if (window.LegacyAndroidApp) window.AndroidApp = window.LegacyAndroidApp;
         """.trimIndent()
 
-        Log.d(TAG, "$logPrefix: injecting legacy strategy=${settings.strategy.prefValue}, useApiV3=$useApiV3")
+        Log.d(TAG, "$logPrefix: injecting legacy strategy=${settings.strategy.prefValue}")
         webView.evaluateJavascript(varsScript, null)
         webView.evaluateJavascript(botScript, null)
         webView.evaluateJavascript("console.log('[Android] legacy bot injected, strategy=${settings.strategy.prefValue}');", null)

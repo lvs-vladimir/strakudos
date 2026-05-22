@@ -14,5 +14,6 @@ data class BotContext(
     val clubRotationRepository: ClubRotationRepository,
     val shouldStop: () -> Boolean,
     val onKudosGiven: (String) -> Unit,
-    val onClubNameChanged: (String) -> Unit
+    val onClubNameChanged: (String) -> Unit,
+    val onSmartTimerTick: (Int?) -> Unit = {}
 )

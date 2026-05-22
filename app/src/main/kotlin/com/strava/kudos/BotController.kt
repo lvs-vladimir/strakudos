@@ -20,6 +20,7 @@ class BotController(
     private val clubRotationRepository: ClubRotationRepository,
     private val onKudosGiven: (String) -> Unit,
     private val onClubNameChanged: (String) -> Unit,
+    private val onSmartTimerTick: (Int?) -> Unit,
     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
     private val wakeHandler: Handler = Handler(Looper.getMainLooper())
 ) {
@@ -68,6 +69,7 @@ class BotController(
         pendingRestart = false
         kotlinStrategy?.stop()
         kotlinStrategy = null
+        onSmartTimerTick(null)
         markStopped()
         stopForegroundService()
         stopWakeLoop()
@@ -147,6 +149,7 @@ class BotController(
         pendingRestart = false
         kotlinStrategy?.stop()
         kotlinStrategy = null
+        onSmartTimerTick(null)
         lastActionTime = 0L
         stopWakeLoop()
         Log.d(TAG, "prepared restored running state")
@@ -189,6 +192,7 @@ class BotController(
     private fun startStrategyOrInjectLegacy(settings: BotSettings, logPrefix: String) {
         kotlinStrategy?.stop()
         kotlinStrategy = null
+        onSmartTimerTick(null)
 
         if (settings.kotlinStrategiesEnabled) {
             val engine = StrategyEngine(
@@ -201,7 +205,8 @@ class BotController(
                     clubRotationRepository = clubRotationRepository,
                     shouldStop = { !isRunning },
                     onKudosGiven = onKudosGiven,
-                    onClubNameChanged = onClubNameChanged
+                    onClubNameChanged = onClubNameChanged,
+                    onSmartTimerTick = onSmartTimerTick
                 )
             )
             kotlinStrategy = engine.create(settings.strategy)
