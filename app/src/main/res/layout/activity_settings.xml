@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -21,7 +22,7 @@
             android:layout_height="40dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_close_clear_cancel"
-            android:tint="#FFFFFF"
+            app:tint="#FFFFFF"
             android:padding="8dp" />
 
         <TextView
@@ -200,13 +201,58 @@
                     android:trackTint="#333333" />
             </LinearLayout>
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Бот будет ставить лайки через REST API вместо имитации кликов. Может обходить веб rate-limit."
+            android:textColor="#888888"
+            android:textSize="12sp"
+            android:layout_marginTop="4dp" />
+
+        <!-- Автозапуск -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="АВТОЗАПУСК"
+            android:textColor="#00F0FF"
+            android:textStyle="bold"
+            android:textSize="14sp"
+            android:letterSpacing="0.1"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="12dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="#111111"
+            android:padding="12dp">
+
             <TextView
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="Бот будет ставить лайки через REST API вместо имитации кликов. Может обходить веб rate-limit."
-                android:textColor="#888888"
-                android:textSize="12sp"
-                android:layout_marginTop="4dp" />
+                android:layout_weight="1"
+                android:text="Открывать приложение после запуска Android"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+
+            <Switch
+                android:id="@+id/switchAutostart"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false"
+                android:thumbTint="#00F0FF"
+                android:trackTint="#333333" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Для Android x86: после загрузки системы Strakudos откроется автоматически. Если бот был запущен до перезагрузки, он продолжит после загрузки Strava."
+            android:textColor="#888888"
+            android:textSize="12sp"
+            android:layout_marginTop="4dp" />
 
             <EditText
                 android:id="@+id/etTestActivityId"

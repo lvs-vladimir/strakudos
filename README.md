@@ -111,13 +111,14 @@
 ### Компоненты
 
 ```
-MainActivity.kt          — Главная Activity с WebView, UI, lifecycle
-KudosService.kt          — Foreground Service для фоновой работы
-bot.js                   — JavaScript-бот, инжектируется в WebView
-strategy.kt              — Экран выбора стратегии
-settings.kt              — Экран настроек задержки
-logs.kt                  — Экран логов работы
-about.kt                 — Экран «О приложении»
+MainActivity.kt Главная Activity WebView, UI, lifecycle
+BotController.kt lifecycle/start/stop/restart/state
+StrategyEngine.kt выбор Kotlin-стратегий
+SmartStrategy.kt / HumanStrategy.kt / ClubsStrategy.kt и остальные стратегии
+WebViewController.kt WebView и evaluateJavascript
+DomAdapter.kt Kotlin wrapper над thin DOM API
+bot.js thin entrypoint
+old_bot_backup.js legacy fallback
 ```
 
 ### WebView-эмуляция
@@ -129,23 +130,21 @@ about.kt                 — Экран «О приложении»
 
 Это позволяет загружать десктопную версию Strava с полной функциональностью.
 
-### JavaScript-бот (bot.js)
+### Kotlin bot + thin DOM adapter
 
-Бот внедряется в WebView и работает внутри DOM-страницы Strava:
+Production-логика бота работает Kotlin-стратегиями через `StrategyEngine`.
+JavaScript больше не принимает стратегических решений:
 
-**Основные функции:**
-- `findKudosButtons()` — ищет кнопки лайка, исключая `give_kudos_button` (который открывает popup со списком лайкнувших)
-- `isRecentActivity()` — парсит дату тренировки, поддерживает: "сегодня", "вчера", "2h ago", "May 20", даты
-- `isOwnActivity()` — сравнивает имя атлета в карточке с именем текущего пользователя
-- `findActivityTab()` — ищет вкладку "Recent Activity" / "Последняя тренировка" в клубах
-- `getClubLinksFromPage()` — собирает ссылки на клубы со страницы `/clubs/search`
-- `clickSandwichMenu()` — эмулирует клик по кнопке меню
-- `simulateClick()` — реалистичная эмуляция клика с `mousedown`, `mouseup`, `click`
+**Основные функции DOM adapter:**
+- `scanVisibleCards()` / `scanAllCards()` возвращают карточки ленты JSON
+- `clickKudos(activityId)` нажимает кнопку kudos
+- `scrollBy(px)`, `scrollToTop()`, `reloadPage()` выполняют простые команды
+- `getPageInfo()` возвращает URL/scroll/end-of-feed
+- `getClubLinks()`, `goToUrl()`, `openClubActivityTab()` нужны клубной стратегии
 
-**Защита от дублирования:**
-- `Set<String>` для ID уже лайкнутых активностей (хранится в `localStorage`)
-- Debounce на рестарт бота (8 секунд)
-- Очистка кэша WebView перед инжектом бота
+**Состояние:**
+- Liked IDs, настройки, счётчик и club rotation хранятся Kotlin repositories в SharedPreferences.
+- Legacy JS сохранён только как fallback `old_bot_backup.js`.
 
 ---
 
@@ -230,7 +229,7 @@ adb install -r app/build/outputs/apk/debug/strakudos-v1.5.4.apk
 
 ### v1.5.5 — Club Name Display
 - Отображение названия текущего клуба на главном экране (в скобках после «КЛУБЫ»)
-- JavaScript bridge `AndroidApp.setClubName()` для передачи имени клуба из WebView
+Kotlin callback `onClubNameChanged` обновляет имя клуба на главном экране
 - Автоматическая очистка имени при выходе из клуба или остановке бота
 
 ### v1.5.4 — Background Wake Fix
@@ -320,24 +319,20 @@ strakudos/
 ├── app/
 │   ├── src/main/
 │   │   ├── assets/
-│   │   │   └── bot.js              # JavaScript-бот
-│   │   ├── java/com/strava/kudos/
-│   │   │   ├── MainActivity.kt     # Главная Activity
-│   │   │   ├── KudosService.kt     # Foreground Service
-│   │   │   ├── strategy.kt         # Экран стратегий
-│   │   │   ├── settings.kt         # Экран настроек
-│   │   │   ├── logs.kt             # Экран логов
-│   │   │   └── about.kt            # О приложении
+│   │   │   ├── bot.js thin entrypoint
+│   │   │   ├── dom_adapter.js thin DOM API
+│   │   │   └── old_bot_backup.js legacy fallback
+│   │   ├── kotlin/com/strava/kudos/
+│   │   │   ├── MainActivity.kt
+│   │   │   ├── BotController.kt
+│   │   │   ├── StrategyEngine.kt
+│   │   │   ├── SmartStrategy.kt / HumanStrategy.kt / ClubsStrategy.kt
+│   │   │   ├── WebViewController.kt
+│   │   │   └── repositories and bridges
 │   │   ├── res/
-│   │   │   ├── layout/             # XML-разметки
-│   │   │   ├── drawable/           # Векторные иконки
-│   │   │   ├── values/
-│   │   │   │   ├── colors.xml      # Цвета Vision Framework
-│   │   │   │   └── strings.xml     # Русские строки
-│   │   │   └── menu/               # Меню навигации
 │   │   └── AndroidManifest.xml
 │   └── build.gradle
-├── Vision-Framework-Architect-DESIGN.md
+├── KOTLIN.md
 └── README.md
 ```
 

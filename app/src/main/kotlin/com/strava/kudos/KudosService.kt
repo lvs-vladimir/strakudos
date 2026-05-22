@@ -33,7 +33,7 @@ class KudosService : Service() {
         
         if (intent?.action == ACTION_STOP) {
             Log.d("KudosService", "Received STOP action, stopping service")
-            sendBroadcast(Intent("com.strava.kudos.SERVICE_STOPPED"))
+            sendBroadcast(Intent("com.strava.kudos.SERVICE_STOPPED").setPackage(packageName))
             stopSelf()
             return START_NOT_STICKY
         }
@@ -94,7 +94,7 @@ class KudosService : Service() {
                 Log.d("KudosService", "Periodic update: count=$count")
                 updateNotification(count)
                 // Пингуем WebView чтобы Chrome не троттлил таймеры в фоне
-                sendBroadcast(Intent("com.strava.kudos.PING_WEBVIEW"))
+                sendBroadcast(Intent("com.strava.kudos.PING_WEBVIEW").setPackage(packageName))
                 handler.postDelayed(this, 1500) // Пинг каждые 1.5 секунды
             }
         }
@@ -109,8 +109,7 @@ class KudosService : Service() {
     }
 
     private fun getKudosCount(): Int {
-        val sharedPref = getSharedPreferences("strakudos_prefs", MODE_PRIVATE)
-        return sharedPref.getInt("kudos_count", 0)
+        return SettingsRepository(this).getKudosCount()
     }
 
     private fun updateNotification(count: Int) {
