@@ -37,6 +37,17 @@
             android:letterSpacing="0.1" />
 
         <Button
+            android:id="@+id/btnShare"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:background="@drawable/btn_outline_bg"
+            android:text="СКОПИРОВАТЬ"
+            android:textColor="#00F0FF"
+            android:textStyle="bold"
+            android:textSize="11sp"
+            android:layout_marginEnd="4dp" />
+
+        <Button
             android:id="@+id/btnClear"
             android:layout_width="wrap_content"
             android:layout_height="36dp"

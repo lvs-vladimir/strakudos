@@ -92,14 +92,25 @@ class SettingsActivity : AppCompatActivity() {
                 putInt("kudos_count", 0)
                 apply()
             }
-            Toast.makeText(this, "Счетчик лайков сброшен", Toast.LENGTH_SHORT).show()
+            // Отправляем Intent в MainActivity для очистки localStorage WebView
+            val intent = Intent(this, MainActivity::class.java)
+            intent.putExtra("reset_liked_data", true)
+            startActivity(intent)
+            Toast.makeText(this, "Счетчик и список лайков сброшены", Toast.LENGTH_SHORT).show()
         }
 
         // Кнопка тестирования API
         val btnTestApi = findViewById<Button>(R.id.btnTestApi)
+        val etTestActivityId = findViewById<EditText>(R.id.etTestActivityId)
         btnTestApi.setOnClickListener {
+            val activityId = etTestActivityId.text.toString().trim()
+            if (activityId.isEmpty()) {
+                Toast.makeText(this, "Введи ID активности для теста", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             val intent = Intent(this, MainActivity::class.java)
-            intent.putExtra("test_api", true)
+            intent.putExtra("run_api_test", true)
+            intent.putExtra("test_activity_id", activityId)
             startActivity(intent)
         }
     }

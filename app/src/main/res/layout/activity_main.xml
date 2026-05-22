@@ -185,19 +185,39 @@
             </LinearLayout>
 
             <!-- Toggle Button (Start/Stop) -->
-            <Button
-                android:id="@+id/btnToggle"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
-                android:background="@drawable/btn_primary_bg"
-                android:enabled="false"
-                android:alpha="0.4"
-                android:text="СТАРТ"
-                android:textColor="#000000"
-                android:textStyle="bold"
-                android:textSize="14sp"
-                android:letterSpacing="0.15"
-                android:padding="0dp" />
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnToggle"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/btn_primary_bg"
+                    android:enabled="false"
+                    android:alpha="0.4"
+                    android:text="СТАРТ"
+                    android:textColor="#000000"
+                    android:textStyle="bold"
+                    android:textSize="14sp"
+                    android:letterSpacing="0.15"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btnRefresh"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/btn_secondary_bg"
+                    android:text="⟳"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold"
+                    android:textSize="20sp"
+                    android:padding="0dp"
+                    android:minWidth="48dp" />
+            </LinearLayout>
         </LinearLayout>
         </LinearLayout>
     </LinearLayout>
