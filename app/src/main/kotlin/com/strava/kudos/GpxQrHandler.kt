@@ -22,6 +22,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.Executors
+import kotlin.math.*
 import org.json.JSONObject
 
 class GpxQrHandler(
@@ -63,25 +64,20 @@ class GpxQrHandler(
                 return
             }
 
-            val minDistanceKm = settingsRepository.getGpxQrMinDistanceKm()
-            if (minDistanceKm > 0) {
-                val distanceKm = getActivityDistanceKm(activityId, cookie)
-                if (distanceKm == null) {
-                    logRepository.add("GPX QR: не удалось определить дистанцию, пропускаем", system = true)
-                    settingsRepository.addGpxQrGeneratedId(activityId)
-                    return
-                }
-                if (distanceKm < minDistanceKm) {
-                    logRepository.add("GPX QR: дистанция ${"%.1f".format(distanceKm)}км < ${minDistanceKm}км, пропускаем", system = true)
-                    settingsRepository.addGpxQrGeneratedId(activityId)
-                    return
-                }
-            }
-
             val gpxData = downloadGpx(activityId, cookie)
             if (gpxData == null) {
                 logRepository.add("GPX QR: ошибка скачивания GPX", system = true)
                 return
+            }
+
+            val minDistanceKm = settingsRepository.getGpxQrMinDistanceKm()
+            if (minDistanceKm > 0) {
+                val gpxDistanceKm = calculateGpxDistanceKm(gpxData)
+                if (gpxDistanceKm < minDistanceKm) {
+                    logRepository.add("GPX QR: дистанция ${"%.1f".format(gpxDistanceKm)}км < ${minDistanceKm}км, пропускаем", system = true)
+                    settingsRepository.addGpxQrGeneratedId(activityId)
+                    return
+                }
             }
 
             val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
@@ -206,33 +202,35 @@ class GpxQrHandler(
         return qrFile
     }
 
-    private fun getActivityDistanceKm(activityId: String, cookie: String): Double? {
+    private fun calculateGpxDistanceKm(gpxData: ByteArray): Double {
         return try {
-            val url = URL("https://www.strava.com/activities/$activityId")
-            val conn = url.openConnection() as HttpURLConnection
-            conn.requestMethod = "GET"
-            conn.setRequestProperty("Cookie", cookie)
-            conn.setRequestProperty("User-Agent", USER_AGENT)
-            conn.connectTimeout = 15000
-            conn.readTimeout = 15000
-            val html = conn.inputStream.bufferedReader().readText()
-            conn.disconnect()
-
-            val regex = Regex(""""distance"\s*:\s*([\d.]+)""")
-            val match = regex.find(html)
-            if (match != null) {
-                val meters = match.groupValues[1].toDoubleOrNull()
-                if (meters != null) {
-                    val km = meters / 1000.0
-                    Log.d(TAG, "activity $activityId distance: ${km}km")
-                    return km
-                }
+            val content = gpxData.toString(Charsets.UTF_8)
+            val regex = Regex("""<trkpt\s+lat="([\d.]+)"\s+lon="([\d.]+)"[^>]*>""")
+            val matches = regex.findAll(content).toList()
+            if (matches.size < 2) {
+                Log.d(TAG, "GPX distance: too few track points (${matches.size})")
+                return 0.0
             }
-            Log.d(TAG, "activity $activityId: distance not found")
-            null
+            val R = 6371.0
+            var total = 0.0
+            for (i in 1 until matches.size) {
+                val lat1 = matches[i - 1].groupValues[1].toDoubleOrNull() ?: continue
+                val lon1 = matches[i - 1].groupValues[2].toDoubleOrNull() ?: continue
+                val lat2 = matches[i].groupValues[1].toDoubleOrNull() ?: continue
+                val lon2 = matches[i].groupValues[2].toDoubleOrNull() ?: continue
+                val dLat = Math.toRadians(lat2 - lat1)
+                val dLon = Math.toRadians(lon2 - lon1)
+                val a = sin(dLat / 2) * sin(dLat / 2) +
+                        cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
+                        sin(dLon / 2) * sin(dLon / 2)
+                val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+                total += R * c
+            }
+            Log.d(TAG, "GPX distance: ${"%.2f".format(total)}km from ${matches.size} points")
+            total
         } catch (e: Exception) {
-            Log.e(TAG, "getActivityDistance error: ${e.message}")
-            null
+            Log.e(TAG, "calculateGpxDistance error: ${e.message}")
+            0.0
         }
     }
 
