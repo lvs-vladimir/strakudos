@@ -105,6 +105,8 @@ class GpxQrHandler(
         } catch (e: Exception) {
             logRepository.add("GPX QR: ошибка: ${e.message}", system = true)
             Log.e(TAG, "processActivity error", e)
+        } finally {
+            pendingIds.remove(activityId)
         }
     }
 
