@@ -26,6 +26,9 @@ class StrategyActivity : AppCompatActivity() {
         val etMaxDelay = findViewById<EditText>(R.id.etMaxDelay)
         val switchSmartTimer = findViewById<Switch>(R.id.switchSmartTimer)
         val etSmartTimerMinutes = findViewById<EditText>(R.id.etSmartTimerMinutes)
+        val switchGpxQr = findViewById<Switch>(R.id.switchGpxQr)
+        val etGpxUploadPassword = findViewById<EditText>(R.id.etGpxUploadPassword)
+        val etGpxQrMinDistance = findViewById<EditText>(R.id.etGpxQrMinDistance)
 
         val settings = settingsRepository.getSettings()
         val currentStrategy = settings.strategy.prefValue
@@ -35,6 +38,9 @@ class StrategyActivity : AppCompatActivity() {
         etMaxDelay.setText(settings.maxDelayMs.toString())
         switchSmartTimer.isChecked = settings.smartCycleTimerEnabled
         etSmartTimerMinutes.setText(settings.smartCycleTimerMinutes.toString())
+        switchGpxQr.isChecked = settings.generateGpxQrEnabled
+        etGpxUploadPassword.setText(settings.gpxUploadPassword)
+        etGpxQrMinDistance.setText(settings.gpxQrMinDistanceKm.toString())
 
         when (settings.strategy) {
             BotStrategyType.SMART -> radioGroup.check(R.id.radioSmart)
@@ -54,17 +60,17 @@ class StrategyActivity : AppCompatActivity() {
                 else -> BotStrategyType.SMART
             }
             settingsRepository.setStrategy(strategy.prefValue)
-            updateSettingsText(tvCurrentSettings, strategy.prefValue, etMinDelay, etMaxDelay, switchSmartTimer, etSmartTimerMinutes, kudosCount)
+            updateSettingsText(tvCurrentSettings, strategy.prefValue, etMinDelay, etMaxDelay, switchSmartTimer, etSmartTimerMinutes, switchGpxQr, etGpxUploadPassword, etGpxQrMinDistance, kudosCount)
         }
 
         switchSmartTimer.setOnCheckedChangeListener { _, isChecked ->
             settingsRepository.setSmartCycleTimerEnabled(isChecked)
-            updateSettingsText(tvCurrentSettings, settingsRepository.getStrategyValue(), etMinDelay, etMaxDelay, switchSmartTimer, etSmartTimerMinutes, kudosCount)
+            updateSettingsText(tvCurrentSettings, settingsRepository.getStrategyValue(), etMinDelay, etMaxDelay, switchSmartTimer, etSmartTimerMinutes, switchGpxQr, etGpxUploadPassword, etGpxQrMinDistance, kudosCount)
         }
 
         etSmartTimerMinutes.doOnTextChanged { _, _, _, _ ->
             saveSmartTimerMinutes(etSmartTimerMinutes)
-            updateSettingsText(tvCurrentSettings, settingsRepository.getStrategyValue(), etMinDelay, etMaxDelay, switchSmartTimer, etSmartTimerMinutes, kudosCount)
+            updateSettingsText(tvCurrentSettings, settingsRepository.getStrategyValue(), etMinDelay, etMaxDelay, switchSmartTimer, etSmartTimerMinutes, switchGpxQr, etGpxUploadPassword, etGpxQrMinDistance, kudosCount)
         }
 
         etSmartTimerMinutes.setOnFocusChangeListener { _, hasFocus ->
@@ -73,15 +79,39 @@ class StrategyActivity : AppCompatActivity() {
 
         etMinDelay.doOnTextChanged { _, _, _, _ ->
             saveDelay(etMinDelay, etMaxDelay)
-            updateSettingsText(tvCurrentSettings, settingsRepository.getStrategyValue(), etMinDelay, etMaxDelay, switchSmartTimer, etSmartTimerMinutes, kudosCount)
+            updateSettingsText(tvCurrentSettings, settingsRepository.getStrategyValue(), etMinDelay, etMaxDelay, switchSmartTimer, etSmartTimerMinutes, switchGpxQr, etGpxUploadPassword, etGpxQrMinDistance, kudosCount)
         }
 
         etMaxDelay.doOnTextChanged { _, _, _, _ ->
             saveDelay(etMinDelay, etMaxDelay)
-            updateSettingsText(tvCurrentSettings, settingsRepository.getStrategyValue(), etMinDelay, etMaxDelay, switchSmartTimer, etSmartTimerMinutes, kudosCount)
+            updateSettingsText(tvCurrentSettings, settingsRepository.getStrategyValue(), etMinDelay, etMaxDelay, switchSmartTimer, etSmartTimerMinutes, switchGpxQr, etGpxUploadPassword, etGpxQrMinDistance, kudosCount)
         }
 
-        updateSettingsText(tvCurrentSettings, currentStrategy, etMinDelay, etMaxDelay, switchSmartTimer, etSmartTimerMinutes, kudosCount)
+        switchGpxQr.setOnCheckedChangeListener { _, isChecked ->
+            settingsRepository.setGpxQrEnabled(isChecked)
+            updateSettingsText(tvCurrentSettings, settingsRepository.getStrategyValue(), etMinDelay, etMaxDelay, switchSmartTimer, etSmartTimerMinutes, switchGpxQr, etGpxUploadPassword, etGpxQrMinDistance, kudosCount)
+        }
+
+        etGpxUploadPassword.doOnTextChanged { _, _, _, _ ->
+            settingsRepository.setGpxUploadPassword(etGpxUploadPassword.text.toString())
+            updateSettingsText(tvCurrentSettings, settingsRepository.getStrategyValue(), etMinDelay, etMaxDelay, switchSmartTimer, etSmartTimerMinutes, switchGpxQr, etGpxUploadPassword, etGpxQrMinDistance, kudosCount)
+        }
+
+        etGpxQrMinDistance.doOnTextChanged { _, _, _, _ ->
+            val km = etGpxQrMinDistance.text.toString().toIntOrNull() ?: 0
+            settingsRepository.setGpxQrMinDistanceKm(km)
+            updateSettingsText(tvCurrentSettings, settingsRepository.getStrategyValue(), etMinDelay, etMaxDelay, switchSmartTimer, etSmartTimerMinutes, switchGpxQr, etGpxUploadPassword, etGpxQrMinDistance, kudosCount)
+        }
+
+        etGpxQrMinDistance.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                val km = (etGpxQrMinDistance.text.toString().toIntOrNull() ?: 0).coerceIn(0, 999)
+                etGpxQrMinDistance.setText(km.toString())
+                settingsRepository.setGpxQrMinDistanceKm(km)
+            }
+        }
+
+        updateSettingsText(tvCurrentSettings, currentStrategy, etMinDelay, etMaxDelay, switchSmartTimer, etSmartTimerMinutes, switchGpxQr, etGpxUploadPassword, etGpxQrMinDistance, kudosCount)
 
         btnBack.setOnClickListener {
             normalizeSmartTimerMinutes(etSmartTimerMinutes)
@@ -114,6 +144,9 @@ class StrategyActivity : AppCompatActivity() {
         etMax: EditText,
         switchSmartTimer: Switch,
         etSmartTimerMinutes: EditText,
+        switchGpxQr: Switch,
+        etGpxUploadPassword: EditText,
+        etGpxQrMinDistance: EditText,
         kudosCount: Int
     ) {
         val strategyName = when (BotStrategyType.fromPref(strategy)) {
@@ -128,6 +161,8 @@ class StrategyActivity : AppCompatActivity() {
         val max = etMax.text.toString().toIntOrNull() ?: 12000
         val timerStatus = if (switchSmartTimer.isChecked) "вкл" else "выкл"
         val timerMinutes = etSmartTimerMinutes.text.toString().toIntOrNull() ?: 10
+        val gpxQrStatus = if (switchGpxQr.isChecked) "вкл" else "выкл"
+        val qrMinDistance = etGpxQrMinDistance.text.toString().toIntOrNull() ?: 0
 
         tv.text = """
             ТЕКУЩИЕ НАСТРОЙКИ
@@ -135,6 +170,7 @@ class StrategyActivity : AppCompatActivity() {
             Стратегия: $strategyName
             Интервал задержки: $min - $max мс
             Таймер умной стратегии: $timerStatus, $timerMinutes мин
+            GPX QR код: $gpxQrStatus${if (qrMinDistance > 0) " (мин. ${qrMinDistance}км)" else ""}
             Всего отправлено лайков: $kudosCount
         """.trimIndent()
     }

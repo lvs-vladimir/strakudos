@@ -15,5 +15,6 @@ data class BotContext(
     val shouldStop: () -> Boolean,
     val onKudosGiven: (String) -> Unit,
     val onClubNameChanged: (String) -> Unit,
-    val onSmartTimerTick: (Int?) -> Unit = {}
+    val onSmartTimerTick: (Int?) -> Unit = {},
+    val gpxQrHandler: GpxQrHandler? = null
 )

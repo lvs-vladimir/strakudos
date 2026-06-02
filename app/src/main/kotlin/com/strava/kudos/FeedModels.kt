@@ -4,6 +4,7 @@ data class FeedCard(
     val activityId: String?,
     val ownerId: String?,
     val athleteName: String,
+    val activityTitle: String = "",
     val hasKudosButton: Boolean,
     val isLiked: Boolean,
     val isOwn: Boolean,

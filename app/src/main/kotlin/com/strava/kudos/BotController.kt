@@ -40,6 +40,9 @@ class BotController(
     private var wakeRunnable: Runnable? = null
     private var kotlinStrategy: BotStrategy? = null
     private val domAdapter by lazy { DomAdapter(context, webViewController) }
+    val gpxQrHandler: GpxQrHandler by lazy {
+        GpxQrHandler(context, settingsRepository, logRepository)
+    }
 
     fun start(force: Boolean = false): Boolean {
         val now = System.currentTimeMillis()
@@ -206,12 +209,14 @@ class BotController(
                     shouldStop = { !isRunning },
                     onKudosGiven = onKudosGiven,
                     onClubNameChanged = onClubNameChanged,
-                    onSmartTimerTick = onSmartTimerTick
+                    onSmartTimerTick = onSmartTimerTick,
+                    gpxQrHandler = gpxQrHandler
                 )
             )
             kotlinStrategy = engine.create(settings.strategy)
             kotlinStrategy?.start()
             logRepository.add("$logPrefix: Kotlin strategy started ${settings.strategy.prefValue}", system = true)
+            saveAthleteIdFromPage()
             return
         }
 
@@ -266,6 +271,20 @@ class BotController(
         wakeRunnable?.let { wakeHandler.removeCallbacks(it) }
         wakeRunnable = null
         Log.d(TAG, "Bot wake loop stopped")
+    }
+
+    private fun saveAthleteIdFromPage() {
+        mainHandler.postDelayed({
+            domAdapter.getProfileAthleteId { id ->
+                if (id != null) {
+                    val numericId = id.toLongOrNull()
+                    if (numericId != null && numericId > 0) {
+                        settingsRepository.setAthleteId(numericId)
+                        Log.d(TAG, "saveAthleteIdFromPage: saved $numericId")
+                    }
+                }
+            }
+        }, 3000)
     }
 
     companion object {

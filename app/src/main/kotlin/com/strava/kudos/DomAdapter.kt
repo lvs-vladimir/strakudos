@@ -2,6 +2,7 @@ package com.strava.kudos
 
 import android.content.Context
 import android.util.Log
+import android.webkit.CookieManager
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -18,12 +19,46 @@ class DomAdapter(
             return
         }
 
+        val athleteId = readStravaAthleteId()
+        Log.d(TAG, "inject: readStravaAthleteId returned $athleteId")
+        val injectAthleteId = if (athleteId != null) {
+            "window.__stravaAthleteId = '$athleteId';"
+        } else {
+            "window.__stravaAthleteId = null;"
+        }
+
         webViewController.evaluate("if(window.__StrakudosAndroidApp) window.AndroidApp = window.__StrakudosAndroidApp;", null)
-        webViewController.evaluate(adapterScript) {
-            webViewController.evaluate("Boolean(window.StrakudosDom && window.StrakudosDom.version >= 5);") { raw ->
-                callback?.invoke(raw == "true")
+        webViewController.evaluate(injectAthleteId, null)
+        webViewController.evaluate(adapterScript)
+        webViewController.evaluate("Boolean(window.StrakudosDom && window.StrakudosDom.version >= 6);") { raw ->
+            callback?.invoke(raw == "true")
+        }
+    }
+
+    fun getProfileAthleteId(callback: (String?) -> Unit) {
+        webViewController.evaluate(
+            """(function(){try{var e=document.querySelector('a[href*="/athletes/"]');if(!e)return null;var m=(e.getAttribute('href')||e.href||'').match(/\/athletes\/(\d+)/);return m?m[1]:null}catch(e){return null}})()""".trimIndent()
+        ) { raw ->
+            val result = raw?.unquoteJsResult()
+            if (result.isNullOrBlank() || result == "null") {
+                webViewController.evaluate(
+                    """(function(){try{var l=document.querySelectorAll('a[href*="/athletes/"]');if(!l.length)return null;var c={},b=null,t=0;for(var i=0;i<l.length;i++){var m=(l[i].getAttribute('href')||'').match(/\/athletes\/(\d+)/);if(m){c[m[1]]=(c[m[1]]||0)+1;if(c[m[1]]>t){t=c[m[1]];b=m[1]}}}return b}catch(e){return null}})()""".trimIndent()
+                ) { raw2 ->
+                    val result2 = raw2?.unquoteJsResult()
+                    callback(if (result2.isNullOrBlank() || result2 == "null") null else result2)
+                }
+            } else {
+                callback(result)
             }
         }
+    }
+
+    private fun readStravaAthleteId(): String? {
+        val cookie = CookieManager.getInstance().getCookie("https://www.strava.com") ?: return null
+        val match = Regex("""strava_remember_id=(\d+)""").find(cookie)
+        if (match != null) return match.groupValues[1]
+        val tokenMatch = Regex("""strava_remember_token=[^;]+_(\d+)""").find(cookie)
+        return tokenMatch?.groupValues?.get(1)
     }
 
     fun scanVisibleCards(callback: (FeedScanResult?) -> Unit) {
@@ -108,6 +143,7 @@ class DomAdapter(
                             activityId = item.optString("activityId").ifBlank { null },
                             ownerId = item.optString("ownerId").ifBlank { null },
                             athleteName = item.optString("athleteName"),
+                            activityTitle = item.optString("activityTitle", ""),
                             hasKudosButton = item.optBoolean("hasKudosButton"),
                             isLiked = item.optBoolean("isLiked"),
                             isOwn = item.optBoolean("isOwn"),

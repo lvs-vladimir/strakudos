@@ -19,7 +19,10 @@ class SettingsRepository(context: Context) {
             autostartEnabled = isAutostartEnabled(),
             isBotRunning = isBotRunning(),
             kudosCount = getKudosCount(),
-            lastUrl = getLastUrl()
+            lastUrl = getLastUrl(),
+            generateGpxQrEnabled = isGpxQrEnabled(),
+            gpxUploadPassword = getGpxUploadPassword(),
+            gpxQrMinDistanceKm = getGpxQrMinDistanceKm()
         )
     }
 
@@ -62,6 +65,30 @@ class SettingsRepository(context: Context) {
     fun getLastUrl(): String? = prefs.getString(KEY_LAST_URL, null)
     fun setLastUrl(value: String?) = prefs.edit().putString(KEY_LAST_URL, value).apply()
 
+    fun isGpxQrEnabled(): Boolean = prefs.getBoolean(KEY_GPX_QR_ENABLED, false)
+    fun setGpxQrEnabled(value: Boolean) = prefs.edit().putBoolean(KEY_GPX_QR_ENABLED, value).apply()
+
+    fun getGpxUploadPassword(): String = prefs.getString(KEY_GPX_UPLOAD_PASSWORD, "") ?: ""
+    fun setGpxUploadPassword(value: String) = prefs.edit().putString(KEY_GPX_UPLOAD_PASSWORD, value).apply()
+
+    fun getGpxQrMinDistanceKm(): Int = prefs.getInt(KEY_GPX_QR_MIN_DISTANCE_KM, 0)
+    fun setGpxQrMinDistanceKm(value: Int) = prefs.edit().putInt(KEY_GPX_QR_MIN_DISTANCE_KM, value.coerceIn(0, 999)).apply()
+
+    fun getGpxQrGeneratedIds(): Set<String> = prefs.getStringSet(KEY_GPX_QR_GENERATED_IDS, emptySet())?.toSet() ?: emptySet()
+    fun setGpxQrGeneratedIds(value: Set<String>) = prefs.edit().putStringSet(KEY_GPX_QR_GENERATED_IDS, value.toSet()).apply()
+    fun addGpxQrGeneratedId(id: String) {
+        val current = getGpxQrGeneratedIds().toMutableSet()
+        current.add(id)
+        setGpxQrGeneratedIds(current)
+    }
+    fun isGpxQrGenerated(id: String): Boolean = getGpxQrGeneratedIds().contains(id)
+
+    fun getAthleteId(): Long? {
+        val v = prefs.getLong(KEY_ATHLETE_ID, -1L)
+        return if (v > 0) v else null
+    }
+    fun setAthleteId(value: Long) = prefs.edit().putLong(KEY_ATHLETE_ID, value).apply()
+
     companion object {
         const val PREFS_NAME = "strakudos_prefs"
         const val KEY_STRATEGY = "strategy"
@@ -76,5 +103,10 @@ class SettingsRepository(context: Context) {
         const val KEY_IS_BOT_RUNNING = "is_bot_running"
         const val KEY_KUDOS_COUNT = "kudos_count"
         const val KEY_LAST_URL = "last_url"
+        const val KEY_GPX_QR_ENABLED = "gpx_qr_enabled"
+        const val KEY_GPX_UPLOAD_PASSWORD = "gpx_upload_password"
+        const val KEY_GPX_QR_GENERATED_IDS = "gpx_qr_generated_ids"
+        const val KEY_GPX_QR_MIN_DISTANCE_KM = "gpx_qr_min_distance_km"
+        const val KEY_ATHLETE_ID = "athlete_id"
     }
 }

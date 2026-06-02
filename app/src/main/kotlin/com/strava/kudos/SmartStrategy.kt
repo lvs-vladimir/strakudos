@@ -38,6 +38,21 @@ class SmartStrategy(context: BotContext) : BaseKotlinStrategy(context, TAG) {
             val settings = settings()
             stepCount += 1
             val visibleCards = scan.cards.filter { !it.activityId.isNullOrBlank() }
+
+            if (settings.generateGpxQrEnabled) {
+                context.domAdapter.getProfileAthleteId { profileId ->
+                    val athleteId = profileId ?: "null"
+                    for (card in visibleCards) {
+                        val id = card.activityId ?: continue
+                        val isNumeric = id.all { it.isDigit() }
+                        log("GPX QR: isOwn=${card.isOwn} id=$id ownerId=${card.ownerId} athleteId=$athleteId name='${card.athleteName}' title='${card.activityTitle}'")
+                        if (card.isOwn && isNumeric) {
+                            context.gpxQrHandler?.enqueue(id, card.activityTitle)
+                        }
+                    }
+                }
+            }
+
             val candidate = findCandidate(visibleCards)
             if (candidate != null) {
                 clickCard(candidate) {

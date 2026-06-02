@@ -39,5 +39,8 @@ data class BotSettings(
     val autostartEnabled: Boolean = false,
     val isBotRunning: Boolean = false,
     val kudosCount: Int = 0,
-    val lastUrl: String? = null
+    val lastUrl: String? = null,
+    val generateGpxQrEnabled: Boolean = false,
+    val gpxUploadPassword: String = "",
+    val gpxQrMinDistanceKm: Int = 0
 )

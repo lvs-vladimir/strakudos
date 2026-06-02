@@ -17,15 +17,38 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+            universalApk true
+        }
+    }
+
     applicationVariants.all { variant ->
-        variant.outputs.all {
-            outputFileName = "strakudos-v1.9.8.apk"
+        variant.outputs.all { output ->
+            def abiName = output.getFilter(com.android.build.OutputFile.ABI) ?: "universal"
+            outputFileName = "strakudos-v${variant.versionName}-${abiName}.apk"
+        }
+    }
+
+    signingConfigs {
+        release {
+            def localKeystore = rootProject.file('.secrets/strakudos-release.jks')
+            if (localKeystore.exists()) {
+                storeFile localKeystore
+                storePassword 'strakudos-release-pass'
+                keyAlias 'strakudos'
+                keyPassword 'strakudos-release-pass'
+            }
         }
     }
 
     buildTypes {
         release {
             minifyEnabled false
+            signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -64,6 +87,7 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'com.google.zxing:core:3.5.3'
 
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'

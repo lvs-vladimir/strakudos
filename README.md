@@ -1,361 +1,283 @@
-# Strakudos — Автоматизация лайков (Kudos) для Strava
+# Strakudos
 
-> **Версия:** 1.7.0  
-> **Автор:** lvs-vladimir  
-> **Лицензия:** MIT
+**Strakudos** — Android-приложение для автоматизации Kudos в Strava через встроенный WebView.
 
----
+- **Версия:** 1.9.8
+- **Пакет:** `com.strava.kudos`
+- **Автор:** lvs-vladimir
+- **Лицензия:** MIT
 
-## Обзор
-
-**Strakudos** — это Android-приложение, которое автоматизирует процесс постановки лайков (Kudos) на тренировки в Strava через встроенный WebView. Приложение эмулирует поведение реального пользователя: прокручивает ленту активностей, выбирает подходящие тренировки и ставит лайки с случайными задержками.
-
-Приложение спроектировано для работы в фоновом режиме и поддерживает Android 14+.
+> Приложение работает поверх веб-интерфейса Strava: Kotlin управляет состоянием, стратегиями и настройками, JavaScript используется только как тонкий DOM-адаптер.
 
 ---
 
-## Дизайн-система: Vision Framework
+## Возможности
 
-Приложение использует фирменный дизайн с насыщенным черным фоном и неоновыми акцентами:
-
-- **Фон:** `#000000` (Pure Black)
-- **Акценты:** `#00F0FF` (Neon Cyan), `#FC5200` (Strava Orange)
-- **Карточки:** Стеклянные панели с закруглением `23dp`
-- **Кнопки:** Pill-форма `60dp` высоты, матовая/глянцевая поверхность
-- **Иконки:** Кастомные векторные иконки в неоновых тонах
+- 5 стратегий автоматизации Kudos.
+- Полностью Kotlin-based lifecycle/state/strategy engine.
+- Thin JavaScript DOM adapter вместо JS-бота.
+- Поддержка grouped activities: каждый участник групповой активности определяется и лайкается отдельно.
+- Таймер паузы для умной стратегии после полного цикла.
+- Настраиваемые задержки Smart/Top/Aggressive/Human стратегий.
+- Отдельные скорости Club strategy.
+- Foreground Service для работы в фоне.
+- Touch overlay во время работы бота.
+- Live системные логи с копированием и сбросом.
+- Сброс счётчика, истории лайков и истории клубов.
+- Автозапуск после запуска Android.
 
 ---
 
-## Функциональность
-
-### 1. Стратегии автоматизации
-
-Приложение поддерживает **5 режимов работы**, которые можно переключать в меню навигации:
+## Стратегии
 
 | Стратегия | Описание |
-|-----------|----------|
-| **Умная (Smart)** | Прокручивает ленту Dashboard, лайкает ~60% тренировок с фильтрацией по возрасту (не старше 3 дней) и с пропуском собственных тренировок |
-| **Только топ (Top Only)** | Лайкает только первые 3-5 тренировок в ленте без прокрутки |
-| **Агрессивная (Aggressive)** | Лайкает почти все тренировки подряд, без фильтров |
-| **Человеческая (Human)** | Имитирует реального пользователя: читает описания, ставит лайки с паузами 5-15 секунд |
-| **Клубы (Clubs)** | Автоматически переключается между клубами, в которые вы вступили, и лайкает тренировки в каждом |
+| --- | --- |
+| **Умная** | Сканирует ленту, лайкает подходящие активности, пропускает свои и уже обработанные, скроллит вниз до конца цикла или лимита уже лайкнутых. |
+| **Только новые** | Работает в верхней зоне ленты, без глубокого скролла. |
+| **Агрессивная** | Быстрая стратегия с минимальными задержками и крупными шагами прокрутки. |
+| **Человечная** | Большие случайные паузы и медленная прокрутка для более естественного поведения. |
+| **Клубы** | Обходит вашу ленту и ленты клубов, автоматически переключается между клубами. |
 
-### 2. Ротация клубов (Clubs Strategy)
+### Таймер умной стратегии
 
-Это флагманская функция, которая автоматически:
+В меню **Стратегия** можно включить таймер умной стратегии:
 
-1. Открывает боковое меню навигации (бутерброд)
-2. Переходит в раздел «Клубы»
-3. Собирает список всех ваших клубов
-4. По очереди заходит в каждый клуб
-5. Переходит на вкладку «Последняя тренировка» (Recent Activity)
-6. Лайкает тренировки в ленте клуба
-7. Переключается к следующему клубу по кругу
+- `Пауза после одного цикла` — вкл/выкл.
+- `Пауза, минут` — длительность паузы от `1` до `1440` минут.
 
-**Индикация на главном экране:**
-Когда выбрана стратегия «Клубы», на главном экране в строке статуса отображается название текущего клуба:  
-`СТРАТЕГИЯ: КЛУБЫ (redbullrussia)`
+Цикл умной стратегии завершается, когда:
 
-**Встроенные фильтры клубов:**
-- Пропуск системных путей (`/clubs/search`, `/clubs/new`, `/clubs/create`)
-- Пропуск тренировок старше 72 часов
-- Пропуск собственных тренировок (по сравнению имени атлета)
-- Автоматический переход к следующему клубу после 10 подряд уже лайкнутых тренировок
+- достигнут конец ленты;
+- достигнут лимит подряд уже лайкнутых активностей.
 
-### 3. Защита от случайных нажатий
+После паузы приложение принудительно обновляет страницу, ждёт полной загрузки WebView, возвращает фокус наверх страницы и только затем запускает новый цикл.
 
-Когда бот активен, весь экран перекрывается **Touch Overlay** (прозрачным слоем), который:
-- Блокирует случайные нажатия пользователя
-- Показывает статус работы бота
-- Позволяет выключить бота кнопкой «СТОП»
-- Автоматически скрывается при остановке
+На главном экране отображается countdown:
 
-### 4. Фоновый режим
-
-Приложение спроектировано для долгой работы в фоне:
-
-- **Foreground Service** с уведомлением показывает текущий счетчик лайков
-- **Wake Lock** предотвращает засыпание процесса
-- `singleTask` + `moveTaskToBack()` — Activity не уничтожается при сворачивании
-- **Периодический wake WebView** — каждые 2 секунды пробуждает WebView, когда приложение в фоне
-- Android 14+ — поддержка разрешения `FOREGROUND_SERVICE_DATA_SYNC`
-
-### 5. Настройки
-
-Меню «Настройки» позволяет конфигурировать:
-
-**Задержки (для стратегий Smart/Top/Aggressive/Human):**
-- **Минимальная задержка** (мс): от 1000 до 30000 мс
-- **Максимальная задержка** (мс): от 3000 до 120000 мс
-- Бот выбирает случайную задержку в этом диапазоне между лайками
-
-**Скорость лайков в клубах (для стратегии «Клубы»):**
-- 🐢 **Медленно**: 2-5 секунд между лайками (человеческая скорость)
-- 🚶 **Средне**: 1-2.5 секунды (по умолчанию)
-- ⚡ **Быстро**: 0.5-1.2 секунды
-- 🔥 **Очень быстро**: 0.3-0.5 секунды (для максимальной эффективности)
-
-### 6. Логи работы
-
-Встроенный экран логов показывает:
-- Статус бота (Запущен / Остановлен)
-- Последнюю URL страницы
-- Счетчик поставленных лайков
-- Время работы
-- Ошибки и предупреждения
+```text
+ПАУЗА
+Следующий запуск умной стратегии через MM:SS
+```
 
 ---
 
-## Техническая архитектура
+## Настройки
 
-### Компоненты
+### Экран «Стратегия»
 
-```
-MainActivity.kt Главная Activity WebView, UI, lifecycle
-BotController.kt lifecycle/start/stop/restart/state
-StrategyEngine.kt выбор Kotlin-стратегий
-SmartStrategy.kt / HumanStrategy.kt / ClubsStrategy.kt и остальные стратегии
-WebViewController.kt WebView и evaluateJavascript
-DomAdapter.kt Kotlin wrapper над thin DOM API
-bot.js thin entrypoint
-old_bot_backup.js legacy fallback
-```
+- выбор стратегии;
+- минимальная задержка, мс;
+- максимальная задержка, мс;
+- таймер умной стратегии;
+- текущая сводка настроек.
 
-### WebView-эмуляция
+Задержка применяется между шагами стратегии. Для умной стратегии DOM scan оптимизирован: сканируются только карточки около видимой зоны, поэтому малые значения вроде `200–500` мс реально используются.
 
-Приложение маскируется под Chrome на macOS:
-- **User-Agent:** `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36`
-- **Viewport:** 1366x768 (эмуляция десктопа)
-- **DPR:** 2.0 (Retina)
+### Экран «Настройки»
 
-Это позволяет загружать десктопную версию Strava с полной функциональностью.
+- скорость лайков в клубах:
+  - медленно: `2–5 сек`;
+  - средне: `1–2.5 сек`;
+  - быстро: `0.5–1.2 сек`;
+  - очень быстро: `0.3–0.5 сек`;
+- лимит подряд уже лайкнутых;
+- автозапуск;
+- сброс счётчика лайков, истории лайков и клубной истории.
 
-### Kotlin bot + thin DOM adapter
+### Системные логи
 
-Production-логика бота работает Kotlin-стратегиями через `StrategyEngine`.
-JavaScript больше не принимает стратегических решений:
+Экран **Системные логи** обновляется в реальном времени через `SharedPreferences.OnSharedPreferenceChangeListener`.
 
-**Основные функции DOM adapter:**
-- `scanVisibleCards()` / `scanAllCards()` возвращают карточки ленты JSON
-- `clickKudos(activityId)` нажимает кнопку kudos
-- `scrollBy(px)`, `scrollToTop()`, `reloadPage()` выполняют простые команды
-- `getPageInfo()` возвращает URL/scroll/end-of-feed
-- `getClubLinks()`, `goToUrl()`, `openClubActivityTab()` нужны клубной стратегии
+Кнопки находятся внизу экрана:
 
-**Состояние:**
-- Liked IDs, настройки, счётчик и club rotation хранятся Kotlin repositories в SharedPreferences.
-- Legacy JS сохранён только как fallback `old_bot_backup.js`.
+- `СКОПИРОВАТЬ` — копирует логи и открывает системный share dialog;
+- `СБРОС` — очищает логи.
 
 ---
 
-## Установка
+## Архитектура
+
+```text
+app/src/main/kotlin/com/strava/kudos/
+├── MainActivity.kt              # главный экран, WebView, UI lifecycle
+├── BotController.kt             # start/stop/restart, BotState, foreground service
+├── StrategyEngine.kt            # выбор Kotlin-стратегии
+├── BotStrategy.kt               # интерфейс стратегии и BotContext
+├── BaseKotlinStrategy.kt        # общий scheduler/click/findCandidate logic
+├── SmartStrategy.kt             # умная стратегия + cycle timer
+├── TopOnlyStrategy.kt           # стратегия только новых активностей
+├── AggressiveStrategy.kt        # быстрая стратегия
+├── HumanStrategy.kt             # человечная стратегия
+├── ClubsStrategy.kt             # клубная ротация
+├── WebViewController.kt         # WebView settings/evaluate/reload helpers
+├── DomAdapter.kt                # Kotlin wrapper для DOM adapter JSON API
+├── SettingsRepository.kt        # настройки SharedPreferences
+├── LogRepository.kt             # системные логи
+├── LikedActivityRepository.kt   # история обработанных активностей
+└── ClubRotationRepository.kt    # история клубной ротации
+
+app/src/main/assets/
+├── bot.js                       # thin entrypoint
+├── dom_adapter.js               # thin DOM API, version 5
+└── old_bot_backup.js            # legacy fallback
+```
+
+### Production flow
+
+```text
+MainActivity
+  -> BotController
+    -> StrategyEngine
+      -> Kotlin strategy
+        -> DomAdapter.kt
+          -> dom_adapter.js
+            -> Strava DOM
+```
+
+### JavaScript слой
+
+`dom_adapter.js` не содержит стратегической логики. Он только выполняет DOM-команды:
+
+- `scanVisibleCards()`;
+- `scanAllCards()`;
+- `clickKudos(activityId)`;
+- `scrollBy(px)`;
+- `scrollToTop()`;
+- `reloadPage()`;
+- `getPageInfo()`;
+- `getClubLinks()`;
+- `goToUrl(url)`;
+- `openClubActivityTab()`.
+
+Legacy JS сохранён только как fallback.
+
+---
+
+## WebView
+
+WebView настроен на работу со Strava:
+
+- JavaScript enabled;
+- DOM storage enabled;
+- cookies и third-party cookies enabled;
+- cache mode `LOAD_NO_CACHE`;
+- mobile Chrome-like User-Agent;
+- аппаратный layer type.
+
+---
+
+## Сборка
 
 ### Требования
 
-- Android 8.0+ (API 26)
-- Устройство с поддержкой WebView
-- Аккаунт Strava
+- Android Studio или установленный Gradle wrapper;
+- Android SDK `compileSdk 34`;
+- JDK с поддержкой Java 8 target;
+- устройство/эмулятор Android `minSdk 24`;
+- ADB для установки на устройство.
 
-### Сборка из исходников
+### Debug APK
 
 ```bash
-# Клонируйте репозиторий
-git clone https://github.com/lvs-vladimir/strakudos.git
-cd strakudos
-
-# Соберите APK
 ./gradlew assembleDebug
-
-# Установите на устройство через ADB
-adb install -r app/build/outputs/apk/debug/strakudos-v1.5.4.apk
 ```
 
-### Прямая установка APK
+APK создаётся здесь:
 
-1. Скачайте `strakudos-v1.5.4.apk`
-2. Разрешите установку из неизвестных источников в настройках Android
-3. Установите APK
-4. Запустите приложение
+```text
+app/build/outputs/apk/debug/strakudos-v1.9.8.apk
+```
+
+### Установка через ADB
+
+```bash
+adb install -r app/build/outputs/apk/debug/strakudos-v1.9.8.apk
+```
+
+### Проверки перед коммитом
+
+```bash
+node --check app/src/main/assets/bot.js
+node --check app/src/main/assets/dom_adapter.js
+node --check app/src/main/assets/old_bot_backup.js
+./gradlew compileDebugKotlin
+./gradlew lintDebug
+```
 
 ---
 
 ## Использование
 
-### Первый запуск
-
-1. Откройте приложение — загрузится страница авторизации Strava
-2. Войдите в свой аккаунт Strava (логин/пароль или OAuth)
-3. После входа вы окажетесь на Dashboard
-
-### Запуск бота
-
-1. Выберите стратегию в боковом меню (свайп справа или кнопка гамбургер)
-2. Нажмите **«СТАРТ»** на главном экране
-3. Экран перекроется Touch Overlay — бот начнет работу
-4. Можно свернуть приложение — бот продолжит работать в фоне
-
-### Остановка бота
-
-- Нажмите **«СТОП»** на Touch Overlay
-- Или нажмите **Стоп** в уведомлении Foreground Service
-- Или закройте приложение через Recent Apps
-
-### Переключение стратегии
-
-1. Откройте боковое меню (свайп слева)
-2. Выберите **«Стратегия»**
-3. Нажмите нужную стратегию
-4. Вернитесь на главный экран и запустите бота
-
-### Настройка задержек
-
-1. Откройте боковое меню → **«Настройки»**
-2. Настройте ползунки мин/макс задержки
-3. Настройки сохраняются автоматически
+1. Установите APK.
+2. Откройте приложение.
+3. Войдите в Strava внутри WebView.
+4. Откройте боковое меню и выберите стратегию.
+5. Настройте задержки/таймеры.
+6. Нажмите `СТАРТ`.
+7. Для остановки нажмите серую кнопку `СТОП` на главном экране или стоп в уведомлении.
 
 ---
 
-## Журнал изменений
+## GitHub push с локальным PAT
 
-### v1.7.0 — Club Speed Settings
-- Настройка скорости лайков в клубах: Медленно / Средне / Быстро / Очень быстро
-- Исправлен черный экран при разворачивании (CPU overload от sleep(0))
-- Минимальная задержка 300мс в фоне для стабильности
+Для локальной машины можно хранить GitHub PAT в ignored-файле:
 
-### v1.6.x — Background Mode Fixes
-- Не вызываем `webView.onPause()` чтобы JavaScript не замораживался
-- Уменьшены задержки в боте для фонового режима
-- Добавлен `FLAG_KEEP_SCREEN_ON` при работе бота
+```text
+.secrets/github_pat
+```
 
-### v1.5.5 — Club Name Display
-- Отображение названия текущего клуба на главном экране (в скобках после «КЛУБЫ»)
-Kotlin callback `onClubNameChanged` обновляет имя клуба на главном экране
-- Автоматическая очистка имени при выходе из клуба или остановке бота
+`.gitignore` уже исключает:
 
-### v1.5.4 — Background Wake Fix
-- Периодический wake WebView в фоновом режиме (каждые 2 сек)
-- Исправлена остановка бота при сворачивании/выключении экрана
+```text
+.secrets/
+.github/instructions/memory.instruction.md
+```
 
-### v1.5.3 — Skip Scroll Optimization
-- Пропуск лишнего скролла на `/clubs/search` если список клубов уже кэширован
-- Ускорен переход между клубами
+Рекомендуемый безопасный push:
 
-### v1.5.2 — Direct Navigation
-- Прямой переход `window.location.href` вместо клика по ссылке (устранение промахов)
+```bash
+python3 - <<'PY'
+from pathlib import Path
+src = Path('.secrets/github_pat')
+p = Path('/tmp/opencode/git-askpass-strakudos.sh')
+p.write_text('#!/bin/sh\ncase "$1" in\n  *Username*) printf "%s" "x-access-token" ;;\n  *Password*) cat "' + str(src.resolve()) + '" | tr -d "\\n" ;;\n  *) printf "%s" "" ;;\nesac\n')
+p.chmod(0o700)
+PY
+GIT_ASKPASS="/tmp/opencode/git-askpass-strakudos.sh" GIT_TERMINAL_PROMPT=0 git push origin main
+rm -f "/tmp/opencode/git-askpass-strakudos.sh"
+```
 
-### v1.5.1 — Club Regex Fix
-- Regex для клубов теперь поддерживает текстовые slug'и (`wildsiberia`, не только цифры)
-- Сохранение `sk_visited` между сессиями
-- Автоинкремент `sk_index` для ротации клубов
-
-### v1.5.0 — Tab Detection
-- Улучшенная детекция вкладки "Последняя тренировка"
-- Задержка 3 секунды при входе в клуб (React DOM render)
-
-### v1.4.9 — Exclude /clubs/new
-- Исключение кнопки "Создать клуб" из списка клубов
-
-### v1.4.8 — Text Slug Support
-- Поддержка текстовых slug'ов в URL клубов
-- Очистка кэша WebView при старте
-
-### v1.4.0 — Clubs Strategy
-- Полностью переработанная стратегия ротации клубов через меню
-- Скролл infinite scroll на `/clubs/search`
-
-### v1.3.0 — Android 14+ Support
-- Разрешение `FOREGROUND_SERVICE_DATA_SYNC`
-- Улучшенная фоновая работа
-
-### v1.2.0 — Debounce & Cache
-- Debounce защита от множественного запуска
-- Очистка WebView cache
-
-### v1.1.0 — Touch Overlay
-- Защита экрана при работе бота
-- Кастомные иконки Vision Framework
-
-### v1.0.0 — Initial Release
-- Базовая автоматизация лайков
-- 5 стратегий
-- WebView эмуляция Chrome
-
----
-
-## Решение проблем
-
-### Бот не ставит лайки в фоне
-- Убедитесь, что уведомление Strakudos активно (Foreground Service работает)
-- На Android 14+ проверьте разрешение "Работа в фоне" в настройках приложения
-
-### Бот застрял на одном клубе
-- Проверьте логи через `adb logcat | grep KudosBot`
-- Очистите данные приложения и начните заново
-
-### WebView показывает мобильную версию
-- Убедитесь, что User-Agent корректно эмулирует Chrome Desktop
-- Попробуйте очистить кэш WebView через настройки Android
-
-### "Устройство не авторизовано" при ADB
-- Подтвердите диалог отладки USB на экране телефона
+Токен нельзя коммитить, вставлять в remote URL или сохранять в git config.
 
 ---
 
 ## Безопасность
 
-- Приложение **не хранит** ваш пароль Strava — используется стандартный WebView с cookies
-- Все данные сохраняются только на устройстве (SharedPreferences, localStorage)
-- Исходный код полностью открыт — вы можете проверить что бот делает
-- Рекомендуется использовать с осторожностью, чтобы не нарушать ToS Strava
+- Пароль Strava не хранится приложением.
+- Авторизация Strava остаётся внутри WebView cookies.
+- Настройки, счётчики, история лайков и логи хранятся локально в SharedPreferences.
+- PAT GitHub должен храниться только локально в `.secrets/github_pat` и не попадать в репозиторий.
+- Используйте автоматизацию осторожно, чтобы не нарушать правила Strava.
 
 ---
 
-## Разработка
+## Статус текущей версии
 
-### Структура проекта
-
-```
-strakudos/
-├── app/
-│   ├── src/main/
-│   │   ├── assets/
-│   │   │   ├── bot.js thin entrypoint
-│   │   │   ├── dom_adapter.js thin DOM API
-│   │   │   └── old_bot_backup.js legacy fallback
-│   │   ├── kotlin/com/strava/kudos/
-│   │   │   ├── MainActivity.kt
-│   │   │   ├── BotController.kt
-│   │   │   ├── StrategyEngine.kt
-│   │   │   ├── SmartStrategy.kt / HumanStrategy.kt / ClubsStrategy.kt
-│   │   │   ├── WebViewController.kt
-│   │   │   └── repositories and bridges
-│   │   ├── res/
-│   │   └── AndroidManifest.xml
-│   └── build.gradle
-├── KOTLIN.md
-└── README.md
-```
-
-### Сборка
-
-```bash
-./gradlew assembleDebug    # Debug APK
-./gradlew assembleRelease  # Release APK (требуется keystore)
-```
+- Kotlin strategies — production default.
+- JavaScript strategy logic — legacy fallback only.
+- Java source layout удалён; production source находится в `app/src/main/kotlin`.
+- Grouped activities поддерживаются.
+- Smart timer, fast visible DOM scan и live logs включены.
 
 ---
 
 ## Лицензия
 
-MIT License — свободное использование, модификация и распространение.
+MIT License.
 
 ---
 
 ## Контакты
 
-- **GitHub:** [github.com/lvs-vladimir/strakudos](https://github.com/lvs-vladimir/strakudos)
-- **Автор:** lvs-vladimir
-
----
-
-*Strakudos — ставьте лайки умно, экономьте время для тренировок!* 🚴‍♂️💙
+- GitHub: <https://github.com/lvs-vladimir/strakudos>
+- Автор: lvs-vladimir

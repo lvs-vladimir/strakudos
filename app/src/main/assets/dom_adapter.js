@@ -1,7 +1,7 @@
 // Strakudos DOM Adapter
 // Thin JavaScript layer for Kotlin controllers/strategies.
 (function () {
-  if (window.StrakudosDom && window.StrakudosDom.version >= 5) return;
+  if (window.StrakudosDom && window.StrakudosDom.version >= 6) return;
 
   const ACTIVITY_RE = /\/activities\/(\d+)/;
   const ATHLETE_RE = /\/athletes\/(\d+)/;
@@ -22,14 +22,18 @@
 
   function getProfileAthleteId() {
     try {
+      if (window.__stravaAthleteId) return window.__stravaAthleteId;
       const cookieId = (document.cookie.match(/strava_remember_id=([^;]+)/) || [])[1];
       if (cookieId) return cookieId;
       const token = (document.cookie.match(/strava_remember_token=([^;]+)/) || [])[1];
       if (token && token.indexOf('_') !== -1) return token.split('_')[1];
       const meta = document.querySelector('meta[name="athlete-id"]');
       if (meta) return meta.getAttribute('content');
-      const htmlMatch = document.documentElement.innerHTML.match(/"(?:athlete_id|current_user_id)":(\d+)/);
-      if (htmlMatch) return htmlMatch[1];
+      var navLink = document.querySelector('header a[href*="/athletes/"], nav a[href*="/athletes/"], [data-testid="user-menu"] a[href*="/athletes/"], a[href*="/athletes/"][class*="avatar"], a[href*="/athletes/"][class*="profile"], a[href*="/athletes/"][class*="user-menu"]');
+      if (navLink) {
+        var navId = extractAthleteId(navLink.getAttribute('href') || navLink.href || '');
+        if (navId) return navId;
+      }
     } catch (e) {}
     return null;
   }
@@ -213,12 +217,36 @@ function clickElement(el) {
     return cards;
   }
 
-  function isOwnActivity(ownerId, athleteName) {
+  function isOwnActivity(ownerId, athleteName, card) {
     const profileId = getProfileAthleteId();
     if (profileId && ownerId && profileId === ownerId) return true;
     const profileName = getProfileName().toLowerCase();
     if (profileName && athleteName && profileName === athleteName.toLowerCase()) return true;
+    if (profileId && card) {
+      try {
+        if (card.querySelector('a[href*="/athletes/' + profileId + '"]')) return true;
+      } catch (e) {}
+    }
     return false;
+  }
+
+  function getActivityTitle(root) {
+    try {
+      var titleEl = root.querySelector('[data-testid="activity-name"]') ||
+        root.querySelector('h2') ||
+        root.querySelector('h3') ||
+        root.querySelector('strong[class*="name" i]') ||
+        root.querySelector('[class*="activity-name" i]') ||
+        root.querySelector('[class*="activity-title" i]');
+      var text = safeText(titleEl);
+      if (text && text.length < 200) return text;
+      var fallback = root.querySelector('a[href*="/activities/"]');
+      if (fallback) {
+        text = safeText(fallback);
+        if (text && text.length < 200) return text;
+      }
+    } catch (e) {}
+    return '';
   }
 
   function getTargetScope(card, btn) {
@@ -286,9 +314,10 @@ function clickElement(el) {
       activityId: resolved.activityId,
       ownerId: owner.ownerId,
       athleteName: owner.athleteName,
+      activityTitle: getActivityTitle(scope || card),
       hasKudosButton: true,
       isLiked: isLikedButton(btn),
-      isOwn: isOwnActivity(owner.ownerId, owner.athleteName),
+      isOwn: isOwnActivity(owner.ownerId, owner.athleteName, card),
       isRecent: isRecentActivity(scope || card),
       top: Math.round(rect.top),
       bottom: Math.round(rect.bottom)
@@ -302,9 +331,10 @@ function clickElement(el) {
       activityId: linkInfo.id,
       ownerId: owner.id,
       athleteName: owner.name,
+      activityTitle: getActivityTitle(card),
       hasKudosButton: false,
       isLiked: false,
-      isOwn: isOwnActivity(owner.id, owner.name),
+      isOwn: isOwnActivity(owner.id, owner.name, card),
       isRecent: isRecentActivity(card),
       top: Math.round(rect.top || card.getBoundingClientRect().top),
       bottom: Math.round(rect.bottom || card.getBoundingClientRect().bottom)
@@ -379,7 +409,7 @@ function pageInfo() {
   }
 
   window.StrakudosDom = {
-    version: 5,
+    version: 6,
 
   scanVisibleCards: function () {
     const info = pageInfo();

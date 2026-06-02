@@ -133,14 +133,14 @@ class MainActivity : AppCompatActivity() {
 
         webViewController.configureDefaultSettings()
 
-        webView.webViewClient = object : WebViewClient() {
-            override fun onPageFinished(view: WebView?, url: String?) {
-                super.onPageFinished(view, url)
-                Log.d(TAG, "onPageFinished: url=$url, botState=${botController.state}, pendingBotRestart=${botController.pendingRestart}")
+            webView.webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    Log.d(TAG, "onPageFinished: url=$url, botState=${botController.state}, pendingBotRestart=${botController.pendingRestart}")
 
-                // Сохраняем текущий URL для восстановления после пересоздания Activity
-                webViewController.saveLastUrl(url)
-                webViewController.consumeForceTopAfterReload()
+                    // Сохраняем текущий URL для восстановления после пересоздания Activity
+                    webViewController.saveLastUrl(url)
+                    webViewController.consumeForceTopAfterReload()
 
                 // Если бот был запущен до перезапуска Activity/Android, стартуем после загрузки Strava.
                 if (pendingStartAfterPageLoad && (url?.contains("strava.com/dashboard") == true || url?.contains("strava.com/clubs/") == true)) {
